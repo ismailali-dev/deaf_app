@@ -1,0 +1,4 @@
+[08-Aug-2024 16:14:08 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Database\Eloquent\Factories\Factory" not found in /home/kustomiz/deafapp.kustomizedesign.com/database/factories/UserFactory.php:12
+Stack trace:
+#0 {main}
+  thrown in /home/kustomiz/deafapp.kustomizedesign.com/database/factories/UserFactory.php on line 12

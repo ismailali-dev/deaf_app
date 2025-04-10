@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "230248685922",
+    "project_id": "deaf-talk-bd136",
+    "storage_bucket": "deaf-talk-bd136.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:230248685922:android:672b79084bd691b731cc3b",
+        "android_client_info": {
+          "package_name": "com.example.deaf_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "230248685922-a6ieu1a53knta3gfa77b6und0ftqmi3n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.deaf_app",
+            "certificate_hash": "fe46c1caa8ca0762b7c2cb9088b97e8412aafee3"
+          }
+        },
+        {
+          "client_id": "230248685922-2r1srp6boer4p2pel6ejneqgprc1qi51.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiyxU1a-6wQ9V0vg6F9uQWsdCIE6lnruI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "230248685922-2r1srp6boer4p2pel6ejneqgprc1qi51.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "230248685922-j7ru1jlvgoofngq6u0kbtckvtnhm4a5q.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.deaf"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

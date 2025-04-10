@@ -1,0 +1,4 @@
+[08-Aug-2024 16:14:05 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Routing\Controller" not found in /home/kustomiz/deafapp.kustomizedesign.com/app/Http/Controllers/Controller.php:9
+Stack trace:
+#0 {main}
+  thrown in /home/kustomiz/deafapp.kustomizedesign.com/app/Http/Controllers/Controller.php on line 9

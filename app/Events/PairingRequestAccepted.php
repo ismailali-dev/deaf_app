@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Events;
+
+use App\Models\User;
+use Illuminate\Broadcasting\Channel;
+use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PresenceChannel;
+// use Illuminate\Broadcasting\SerializesModels;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Broadcasting\PrivateChannel;
+
+class PairingRequestAccepted implements ShouldBroadcastNow
+{
+    use InteractsWithSockets;
+
+    public $sender;
+    public $receiver;
+    public $roomId;
+
+    public function __construct(User $sender, User $receiver, $roomId)
+    {
+        $this->sender = $sender;
+        $this->receiver = $receiver;
+        $this->roomId = $roomId;
+    }
+
+    public function broadcastOn()
+    {
+        return [
+            new Channel('room.' . $this->roomId), // Chat Room Channel
+            new Channel('pairing.' . $this->sender->id), // Notify Sender
+            new Channel('pairing.' . $this->receiver->id) // Notify Receiver
+        ];
+    }
+
+    public function broadcastAs()
+    {
+        return 'pairing.accepted';
+    }
+}

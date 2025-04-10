@@ -1,0 +1,174 @@
+  2025-02-10 15:46:21 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:21 App\Jobs\EndBroadcastJob .................. 10.87ms DONE
+  2025-02-10 15:46:21 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:22 App\Events\BroadcastStarted .................... 1s DONE
+  2025-02-10 15:46:22 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:22 App\Events\BroadcastEnded ................ 305.11ms DONE
+  2025-02-10 15:46:22 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:22 App\Events\BroadcastStarted .............. 296.96ms DONE
+  2025-02-10 15:46:22 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:23 App\Events\BroadcastEnded ................ 357.31ms DONE
+  2025-02-10 15:46:23 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:23 App\Events\BroadcastStarted .............. 520.27ms DONE
+  2025-02-10 15:46:23 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:24 App\Events\BroadcastEnded ................ 357.76ms DONE
+  2025-02-10 15:46:24 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:24 App\Events\BroadcastStarted .............. 297.24ms DONE
+  2025-02-10 15:46:24 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:25 App\Events\BroadcastEnded ................ 300.64ms DONE
+  2025-02-10 15:46:25 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:25 App\Jobs\EndBroadcastJob ................... 6.59ms DONE
+  2025-02-10 15:46:25 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:25 App\Events\BroadcastStarted .............. 298.69ms DONE
+  2025-02-10 15:46:25 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:25 App\Events\BroadcastEnded ................ 297.37ms DONE
+  2025-02-10 15:46:25 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:25 App\Events\BroadcastStarted .............. 298.78ms DONE
+  2025-02-10 15:46:25 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:26 App\Events\BroadcastEnded ................ 297.51ms DONE
+  2025-02-10 15:46:26 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:26 App\Events\BroadcastStarted .............. 302.98ms DONE
+  2025-02-10 15:46:26 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:26 App\Events\BroadcastEnded ................ 297.07ms DONE
+  2025-02-10 15:46:26 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:26 App\Jobs\EndBroadcastJob ................... 5.74ms DONE
+  2025-02-10 15:46:26 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:27 App\Events\BroadcastStarted .............. 299.92ms DONE
+  2025-02-10 15:46:27 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:27 App\Events\BroadcastEnded ................ 300.80ms DONE
+  2025-02-10 15:46:27 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:27 App\Events\BroadcastStarted .............. 298.86ms DONE
+  2025-02-10 15:46:27 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:28 App\Events\BroadcastEnded ................ 300.55ms DONE
+  2025-02-10 15:46:28 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:28 App\Jobs\EndBroadcastJob ................... 3.31ms DONE
+  2025-02-10 15:46:28 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:28 App\Events\BroadcastStarted .............. 296.91ms DONE
+  2025-02-10 15:46:28 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:28 App\Events\BroadcastEnded ................ 297.09ms DONE
+  2025-02-10 15:46:28 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:28 App\Jobs\EndBroadcastJob ................... 2.66ms DONE
+  2025-02-10 15:46:28 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:28 App\Events\BroadcastStarted .............. 297.64ms DONE
+  2025-02-10 15:46:28 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:29 App\Events\BroadcastEnded ................ 298.67ms DONE
+  2025-02-10 15:46:29 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:29 App\Events\BroadcastStarted .............. 295.94ms DONE
+  2025-02-10 15:46:29 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:29 App\Events\BroadcastEnded ................ 297.72ms DONE
+  2025-02-10 15:46:29 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:30 App\Events\BroadcastStarted .............. 297.63ms DONE
+  2025-02-10 15:46:30 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:30 App\Events\BroadcastEnded ................ 295.94ms DONE
+  2025-02-10 15:46:30 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:30 App\Events\BroadcastStarted .............. 297.31ms DONE
+  2025-02-10 15:46:30 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:31 App\Events\BroadcastEnded ................ 296.52ms DONE
+  2025-02-10 15:46:31 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:31 App\Events\BroadcastStarted .............. 296.38ms DONE
+  2025-02-10 15:46:31 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:31 App\Events\BroadcastEnded ................ 296.76ms DONE
+  2025-02-10 15:46:31 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:31 App\Jobs\EndBroadcastJob ................... 2.41ms DONE
+  2025-02-10 15:46:31 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:31 App\Events\BroadcastStarted .............. 296.43ms DONE
+  2025-02-10 15:46:31 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:32 App\Events\BroadcastEnded ................ 298.14ms DONE
+  2025-02-10 15:46:32 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:32 App\Events\BroadcastStarted .............. 297.33ms DONE
+  2025-02-10 15:46:32 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:32 App\Events\BroadcastEnded ................ 298.05ms DONE
+  2025-02-10 15:46:32 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:32 App\Jobs\EndBroadcastJob .................. 22.71ms DONE
+  2025-02-10 15:46:32 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:33 App\Events\BroadcastStarted .............. 296.43ms DONE
+  2025-02-10 15:46:33 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:33 App\Events\BroadcastStarted .............. 297.41ms DONE
+  2025-02-10 15:46:33 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:33 App\Events\BroadcastStarted .............. 296.49ms DONE
+  2025-02-10 15:46:33 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:34 App\Events\BroadcastEnded ................ 296.51ms DONE
+  2025-02-10 15:46:34 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:34 App\Jobs\EndBroadcastJob ................... 2.49ms DONE
+  2025-02-10 15:46:34 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:34 App\Events\BroadcastStarted .............. 297.67ms DONE
+  2025-02-10 15:46:34 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:34 App\Events\BroadcastEnded ................ 296.36ms DONE
+  2025-02-10 15:46:34 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:34 App\Jobs\EndBroadcastJob ................... 2.13ms DONE
+  2025-02-10 15:46:34 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:35 App\Events\BroadcastStarted .............. 296.71ms DONE
+  2025-02-10 15:46:35 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:35 App\Events\BroadcastEnded ................ 297.62ms DONE
+  2025-02-10 15:46:35 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:46:35 App\Jobs\EndBroadcastJob ................... 2.80ms DONE
+  2025-02-10 15:46:35 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:35 App\Events\BroadcastStarted .............. 296.72ms DONE
+  2025-02-10 15:46:35 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:35 App\Events\BroadcastEnded ................ 296.16ms DONE
+  2025-02-10 15:46:35 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:36 App\Events\BroadcastStarted .............. 298.49ms DONE
+  2025-02-10 15:46:36 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:36 App\Events\BroadcastStarted .............. 296.49ms DONE
+  2025-02-10 15:46:36 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:36 App\Events\BroadcastEnded ................ 295.48ms DONE
+  2025-02-10 15:46:36 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:37 App\Events\BroadcastEnded ................ 295.44ms DONE
+  2025-02-10 15:46:37 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:37 App\Events\BroadcastStarted .............. 296.39ms DONE
+  2025-02-10 15:46:37 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:37 App\Events\BroadcastStarted .............. 296.16ms DONE
+  2025-02-10 15:46:37 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:38 App\Events\BroadcastEnded ................ 296.20ms DONE
+  2025-02-10 15:46:38 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:38 App\Events\BroadcastEnded ................ 295.97ms DONE
+  2025-02-10 15:46:38 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:38 App\Events\BroadcastStarted .............. 296.18ms DONE
+  2025-02-10 15:46:38 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:38 App\Events\BroadcastEnded ................ 296.60ms DONE
+  2025-02-10 15:46:38 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:39 App\Events\BroadcastStarted .............. 296.98ms DONE
+  2025-02-10 15:46:39 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:39 App\Events\BroadcastEnded ................ 297.50ms DONE
+  2025-02-10 15:46:39 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:39 App\Events\BroadcastStarted .............. 296.99ms DONE
+  2025-02-10 15:46:39 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:40 App\Events\BroadcastEnded ................ 296.02ms DONE
+  2025-02-10 15:46:40 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:40 App\Events\BroadcastStarted .............. 301.32ms DONE
+  2025-02-10 15:46:40 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:40 App\Events\BroadcastEnded ................ 297.66ms DONE
+  2025-02-10 15:46:40 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:46:41 App\Events\BroadcastStarted .............. 297.56ms DONE
+  2025-02-10 15:46:41 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 15:46:41 App\Events\BroadcastEnded ................ 298.44ms DONE
+  2025-02-10 15:46:41 App\Events\BroadcastAutoEnded .................. RUNNING
+  2025-02-10 15:46:41 App\Events\BroadcastAutoEnded ............ 299.93ms DONE
+  2025-02-10 15:50:20 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:50:21 App\Events\BroadcastStarted .................... 1s DONE
+  2025-02-10 15:54:34 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:54:35 App\Events\BroadcastStarted .................... 1s DONE
+  2025-02-10 15:55:20 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:55:20 App\Jobs\EndBroadcastJob .................. 12.40ms DONE
+  2025-02-10 15:55:20 App\Events\BroadcastAutoEnded .................. RUNNING
+  2025-02-10 15:55:20 App\Events\BroadcastAutoEnded ............ 262.47ms DONE
+  2025-02-10 15:56:26 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 15:56:27 App\Events\BroadcastStarted .............. 886.14ms DONE
+  2025-02-10 15:59:33 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 15:59:33 App\Jobs\EndBroadcastJob .................. 11.97ms DONE
+  2025-02-10 16:06:15 App\Jobs\EndBroadcastJob ....................... RUNNING
+  2025-02-10 16:06:15 App\Jobs\EndBroadcastJob .................. 16.42ms DONE
+  2025-02-10 16:06:15 App\Events\BroadcastAutoEnded .................. RUNNING
+  2025-02-10 16:06:16 App\Events\BroadcastAutoEnded .................. 1s DONE
+  2025-02-10 16:14:02 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 16:14:03 App\Events\BroadcastStarted .................... 1s DONE
+  2025-02-10 16:17:12 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 16:17:13 App\Events\BroadcastEnded ...................... 1s DONE
+  2025-02-10 16:17:37 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 16:17:37 App\Events\BroadcastStarted .............. 264.32ms DONE
+  2025-02-10 16:17:52 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 16:17:52 App\Events\BroadcastEnded ................ 265.20ms DONE
+  2025-02-10 16:23:53 App\Events\BroadcastEnded ...................... RUNNING
+  2025-02-10 16:23:54 App\Events\BroadcastEnded ...................... 1s DONE
+  2025-02-10 16:39:27 App\Events\BroadcastStarted .................... RUNNING
+  2025-02-10 16:39:28 App\Events\BroadcastStarted .................... 1s DONE
