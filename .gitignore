@@ -17,6 +17,7 @@ public_html/hot
 
 storage/*.key
 .env
+.cpanel.yml
 .well-known
 c5dbf_255b5_14e227a153255c0c84ffb96d787caf6b.key
 deaf-talk-bd136-firebase-adminsdk-fbsvc-8b7c740b6e.json
