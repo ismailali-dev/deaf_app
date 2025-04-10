@@ -26,8 +26,6 @@ use App\Events\PairingRequestExpired;
 use App\Models\Sentence;
 use App\Models\AudioFile;
 
-
-
 class UserCommonController extends BaseController
 {
 
