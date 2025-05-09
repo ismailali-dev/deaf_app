@@ -17,13 +17,13 @@ class RoomExited implements ShouldBroadcastNow
 
     public $roomId;
     public $exitedUser;
+    public $isAdmin;
 
-    public function __construct($roomId, User $exitedUser)
+    public function __construct($roomId, User $exitedUser, $isAdmin = false)
     {
         $this->roomId = $roomId;
         $this->exitedUser = $exitedUser;
-        
-        // dd($this->roomId);
+        $this->isAdmin = $isAdmin;
     }
 
     public function broadcastOn()
@@ -35,13 +35,15 @@ class RoomExited implements ShouldBroadcastNow
     {
         return 'room.exited';
     }
-
-    public function broadcastWith()
+    
+     public function broadcastWith()
     {
         return [
             'message' => 'User has left the chat',
             'room_id' => $this->roomId,
-            'exited_user' => $this->exitedUser
+            'exited_user' => $this->exitedUser,
+            'is_admin'=>$this->isAdmin
         ];
     }
+
 }

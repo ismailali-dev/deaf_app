@@ -29,9 +29,9 @@ class PairingRequestAccepted implements ShouldBroadcastNow
     public function broadcastOn()
     {
         return [
-            new Channel('room.' . $this->roomId), // Chat Room Channel
-            new Channel('pairing.' . $this->sender->id), // Notify Sender
-            new Channel('pairing.' . $this->receiver->id) // Notify Receiver
+            new Channel('room.' . $this->roomId),
+            new Channel('pairing.' . $this->sender->id),
+            new Channel('pairing.' . $this->receiver->id),
         ];
     }
 
@@ -39,4 +39,6 @@ class PairingRequestAccepted implements ShouldBroadcastNow
     {
         return 'pairing.accepted';
     }
+
+    
 }

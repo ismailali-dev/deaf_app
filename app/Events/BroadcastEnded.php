@@ -28,9 +28,7 @@ class BroadcastEnded implements ShouldBroadcast
     public function __construct(Broadcast $broadcast)
     {
         $this->broadcast = new BroadcastResource($broadcast); // Use the resource for broadcast
-        
-       
-        
+    
     }
 
     /**
