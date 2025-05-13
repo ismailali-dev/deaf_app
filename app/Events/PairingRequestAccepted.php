@@ -18,12 +18,14 @@ class PairingRequestAccepted implements ShouldBroadcastNow
     public $sender;
     public $receiver;
     public $roomId;
+    public $connectedCounts;
 
-    public function __construct(User $sender, User $receiver, $roomId)
+    public function __construct(User $sender, User $receiver, $roomId,$connectedCounts)
     {
         $this->sender = $sender;
         $this->receiver = $receiver;
         $this->roomId = $roomId;
+        $this->connectedCounts=$connectedCounts ;
     }
 
     public function broadcastOn()

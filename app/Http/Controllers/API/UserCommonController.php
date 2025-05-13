@@ -24,10 +24,12 @@ use App\Events\RoomExited;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use App\Events\PairingRequestExpired;
+use App\Events\GroupMessageSent;
 use App\Models\Sentence;
 use App\Models\AudioFile;
 use App\Models\Pairing;
 use App\Models\Connection;
+use Illuminate\Support\Facades\Auth;
 
 class UserCommonController extends BaseController
 {
@@ -494,6 +496,10 @@ class UserCommonController extends BaseController
    
    public function acceptPairingRequest(Request $request)
 {
+    
+    
+    
+    
     $request->validate([
         'sender_id' => 'required|exists:users,id',
     ]);
@@ -531,9 +537,13 @@ class UserCommonController extends BaseController
 
     // Remove request from cache
     Cache::forget('pairing_request_' . $sender->id);
+    
+   $connectedCounts =  \App\Models\Connection::where('status','connected')->count();
+    
+   
 
     // Broadcast pairing accepted
-    broadcast(new PairingRequestAccepted($sender, $receiver, $roomId));
+    broadcast(new PairingRequestAccepted($sender, $receiver, $roomId,$connectedCounts));
 
     return successResponse('Pairing request accepted', ['room_id' => $roomId]);
 }
@@ -604,6 +614,53 @@ public function rejectPairingRequest(Request $request)
 
 
    
+
+public function sendGroupMessage(Request $request)
+{
+    try {
+        $validated = $request->validate([
+            'room_id' => 'required|string|exists:connections,room_id',
+            'message' => 'nullable|string|required_without:attachment',
+            'attachment' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:3072|required_without:message',
+        ]);
+
+        $data = [
+            'sender_id' => Auth::id(),
+            'room_id' => $validated['room_id'],
+        ];
+        
+        
+       $sender = User::find(Auth::id(), ['id', 'name', 'avatar','created_at']);
+
+        if (!$sender) {
+            return errorResponse("Sender not found");
+        }
+    
+
+        // Handle attachment
+        if ($request->hasFile('attachment') && $request->file('attachment')->isValid()) {
+            try {
+                $uploadedPath = $request->file('attachment')->store('chat/attachments', 'public');
+                $data['attachment'] = $uploadedPath;
+            } catch (\Exception $e) {
+                return errorResponse('Image upload failed', 400);
+            }
+        }
+
+        // Handle message
+        if ($request->filled('message')) {
+            $data['message'] = $validated['message'];
+        }
+
+       
+         broadcast(new GroupMessageSent($sender, $data['message'], $validated['room_id']))->toOthers();
+
+        return successResponse('Message Broadcasted Successfully', $data);
+
+    } catch (\Exception $e) {
+        return errorResponse('Unable to broadcast message: ' . $e->getMessage(), 400);
+    }
+}
 
 
 

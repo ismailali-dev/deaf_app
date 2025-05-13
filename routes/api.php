@@ -100,6 +100,7 @@ Route::group(['prefix'=>'common'], function () {
                 Route::post('/accept-pairing-request', 'UserCommonController@acceptPairingRequest');
                 Route::post('/reject-pairing-request', 'UserCommonController@rejectPairingRequest');
                 Route::post('/exit-room-request', 'UserCommonController@exitRoomRequest');
+                Route::post('/send-group-messsage', 'UserCommonController@sendGroupMessage');
                 Route::post('/send-voice-messsage', 'UserCommonController@sendVoiceMessage');
                 
                 // Route::get('/nearby-users', [UserController::class, 'getNearbyUsers']);
