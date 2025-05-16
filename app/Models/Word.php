@@ -25,4 +25,13 @@ class Word extends Model
     {
         return $this->morphMany(AudioFile::class, 'audioable');
     }
+    
+    public function getPairedNumberAttribute($value)
+    {
+         
+            return (int)$value;
+         
+       
+    }
+    
 }

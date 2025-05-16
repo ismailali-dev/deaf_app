@@ -267,6 +267,8 @@ class AuthController extends BaseController
                     $deviceInfo = $request->except(['email', 'password', 'role_id']);
                     $user->devices()->updateOrCreate(['device_type' => $request->device_type], $deviceInfo);
                 }
+                
+          
     
                 $user = ProfileResource::make($user);
                 $success['user'] = $user;

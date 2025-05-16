@@ -16,6 +16,7 @@ use App\Models\GlobalEmergencyRecording;
 use App\Models\UserEmergencyRecording;
 use App\Events\PairingRequestSent;
 use App\Events\PairingRequestAccepted;
+use App\Events\PairingRequestAcceptedCount;
 use App\Jobs\NoRespond;
 use App\Events\PairingRequestRejected;
 use App\Events\RoomVoiceMessage;
@@ -239,183 +240,179 @@ class UserCommonController extends BaseController
         }
     }
     
-    public function getActivatelistenerUersCount(Request $request)
-    {
-        try {
-            $user = auth()->user();
     
-            // Paired Count
-            $pairedCount = Pairing::where(function ($q) use ($user) {
-                    $q->where('from_id', $user->id)
-                      ->orWhere('to_id', $user->id);
-                })
-                ->where('status', 'paired')
-                ->count();
     
-            // Connected Count (in current room)
-            $connectedCount = 0;
-            $connectedUserIds = [];
-            if ($user->current_room_id) {
-                $connections = Connection::where('room_id', $user->current_room_id)
-                    ->where(function ($q) use ($user) {
-                        $q->where('from_id', $user->id)
-                          ->orWhere('to_id', $user->id);
-                    })
-                    ->where('status', 'connected')
-                    ->get();
-    
-                $connectedUserIds = $connections->flatMap(function ($conn) use ($user) {
-                        return [$conn->from_id, $conn->to_id];
-                    })
-                    ->unique()
-                    ->filter(function ($id) use ($user) {
-                        return $id != $user->id;
-                    })
-                    ->values()
-                    ->all();
-    
-                $connectedCount = count($connectedUserIds);
-            }
-    
-            // Available Count (nearby users)
-            $availableCount = 0;
-            $oppositeRole = ($user->role_id == 3) ? 2 : (($user->role_id == 2) ? 3 : null);
-            if ($oppositeRole && $user->latitude && $user->longitude) {
-                // Re-fetch connected users for exclusion (same as in getActivatelistenerUers)
-                $connectedUserIds = Connection::where(function ($q) use ($user) {
-                        $q->where('from_id', $user->id)
-                          ->orWhere('to_id', $user->id);
-                    })
-                    ->where('status', 'connected')
-                    ->get()
-                    ->flatMap(function ($conn) use ($user) {
-                        return [$conn->from_id, $conn->to_id];
-                    })
-                    ->unique()
-                    ->filter(function ($id) use ($user) {
-                        return $id != $user->id;
-                    })
-                    ->values()
-                    ->all();
-    
-                $range = 10; // meters
-    
-                $availableCount = User::where('role_id', $oppositeRole)
-                    ->where('id', '!=', $user->id)
-                    ->whereNotIn('id', $connectedUserIds)
-                    ->whereRaw(
-                        "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?",
-                        [$user->latitude, $user->longitude, $user->latitude, $range / 1000]
-                    )
-                    ->count();
-            }
-    
-            return successResponse('Counts retrieved successfully', [
-                'paired' => $pairedCount,
-                'connected' => $connectedCount,
-                'available' => $availableCount,
-            ]);
-        } catch (\Throwable $th) {
-            return errorResponse($th->getMessage(), 500);
-        }
-    }
+public function getActivatelistenerUersCount()
+{
+    try {
+        $user = auth()->user();
 
+        // All connected user IDs
+       $connectedUserIds = Connection::where(function ($q) use ($user) {
+            $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+        })
+        ->where('status', 'connected')
+        ->get()
+        ->flatMap(function ($conn) use ($user) {
+            return $conn->from_id == $user->id ? [$conn->to_id] : [$conn->from_id];
+        })
+        ->unique()
+        ->values()
+        ->all();
 
-    
-    public function getActivatelistenerUers(Request $request)
-    {
-        try {
-            $request->validate([
-                'type' => 'required|in:paired,connected,available',
-            ]);
-    
-            $user = auth()->user();
-    
-            // Paired Users
-            if ($request->type === 'paired') {
-                $pairings = Pairing::with(['fromUser', 'toUser'])
-                    ->where(function ($q) use ($user) {
-                        $q->where('from_id', $user->id)
-                          ->orWhere('to_id', $user->id);
-                    })
-                    ->where('status', 'paired')  // only confirmed pairs
-                    ->get();
-    
-                $pairedUsers = $pairings->map(function ($pair) use ($user) {
-                    $other = $pair->from_id == $user->id ? $pair->toUser : $pair->fromUser;
-                    return new ProfileResource($other);
-                });
-    
-                return successResponse('Paired users retrieved', $pairedUsers);
-            }
-    
-            // Connected Users (in the same room)
-            if ($request->type === 'connected') {
-                if (!$user->current_room_id) {
-                    return successResponse('No connected users', []);
-                }
-    
-                $connections = Connection::with(['fromUser', 'toUser'])
-                    ->where('room_id', $user->current_room_id)
-                    ->where(function ($q) use ($user) {
-                        $q->where('from_id', $user->id)
-                          ->orWhere('to_id', $user->id);
-                    })
-                    ->where('status', 'connected')
-                    ->get();
-    
-                $connectedUsers = $connections->map(function ($connection) use ($user) {
-                    $other = $connection->from_id == $user->id ? $connection->toUser : $connection->fromUser;
-                    return new ProfileResource($other);
-                });
-    
-                return successResponse('Connected users retrieved', $connectedUsers);
-            }
-    
-            // Available Nearby Users (Bluetooth range) excluding connected users
-            if ($request->type === 'available') {
-                $oppositeRole = ($user->role_id == 3) ? 2 : (($user->role_id == 2) ? 3 : null);
-                if (!$oppositeRole) {
-                    return errorResponse('Invalid role_id for this operation', 403);
-                }
-    
-                $range = 10; // meters
-    
-                // Get already connected user IDs to exclude
-                $connectedUserIds = Connection::where(function ($q) use ($user) {
-                    $q->where('from_id', $user->id)
-                      ->orWhere('to_id', $user->id);
+        // PAIRED COUNT excluding connected users
+        $pairings = Pairing::where(function ($q) use ($user) {
+                $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+            })
+            ->get();
+
+           $pairedCount = Pairing::where(function ($q) use ($user) {
+            $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+        })
+        ->get()
+        ->filter(function ($pair) use ($user, $connectedUserIds) {
+            $otherUserId = $pair->from_id == $user->id ? $pair->to_id : $pair->from_id;
+            return !in_array($otherUserId, $connectedUserIds); // exclude connected
+        })
+    ->count();
+
+        // CONNECTED COUNT (same room & connected)
+        $connectedCount = 0;
+        if ($user->current_room_id) {
+            $connectedCount = Connection::where('room_id', $user->current_room_id)
+                ->where(function ($q) use ($user) {
+                    $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
                 })
                 ->where('status', 'connected')
-                ->get()
-                ->flatMap(function ($conn) use ($user) {
-                    return [$conn->from_id, $conn->to_id];
-                })
-                ->unique()
-                ->filter(function ($id) use ($user) {
-                    return $id != $user->id;
-                })
-                ->values()
-                ->all();
-    
-                $availableUsers = User::where('role_id', $oppositeRole)
-                    ->where('id', '!=', $user->id)
-                    ->whereNotIn('id', $connectedUserIds)
-                    ->whereRaw(
-                        "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?",
-                        [$user->latitude, $user->longitude, $user->latitude, $range / 1000]
-                    )
-                    ->get();
-    
-                return successResponse('Nearby users retrieved', ProfileResource::collection($availableUsers));
-            }
-    
-            return errorResponse('Invalid type', 400);
-    
-        } catch (\Throwable $th) {
-            return errorResponse($th->getMessage(), 500);
+                ->count();
         }
+
+        // AVAILABLE COUNT (based on location, not paired, not connected)
+        $oppositeRole = $user->role_id == 3 ? 2 : ($user->role_id == 2 ? 3 : null);
+        $availableCount = 0;
+
+        if ($oppositeRole) {
+            $pairedUserIds = $pairings->map(function ($pair) use ($user) {
+                return $pair->from_id == $user->id ? $pair->to_id : $pair->from_id;
+            })->unique()->all();
+
+            $availableCount = User::where('role_id', $oppositeRole)
+                ->where('id', '!=', $user->id)
+                ->whereNotIn('id', array_merge($connectedUserIds, $pairedUserIds))
+                ->whereRaw(
+                    "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?",
+                    [$user->latitude, $user->longitude, $user->latitude, 10 / 1000]
+                )
+                ->count();
+        }
+
+        return successResponse('Counts fetched', [
+            'paired' => $pairedCount,
+            'connected' => $connectedCount,
+            'available' => $availableCount
+        ]);
+    } catch (\Throwable $th) {
+        return errorResponse($th->getMessage(), 500);
     }
+}
+
+
+
+
+
+
+    
+  public function getActivatelistenerUers(Request $request)
+{
+    try {
+        $request->validate(['type' => 'required|in:paired,connected,available']);
+
+        $user = auth()->user();
+
+        // All connected user IDs
+       $connectedUserIds = Connection::where(function ($q) use ($user) {
+            $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+        })
+        ->where('status', 'connected')
+        ->get()
+        ->flatMap(function ($conn) use ($user) {
+            return $conn->from_id == $user->id ? [$conn->to_id] : [$conn->from_id];
+        })
+        ->unique()
+        ->values()
+        ->all();
+
+        if ($request->type === 'paired') {
+            $pairings = Pairing::with(['fromUser', 'toUser'])
+                ->where(function ($q) use ($user) {
+                    $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+                })
+                ->get();
+
+            // ❗ Filter out any user who is already connected
+                $pairedUsers = $pairings->filter(function ($pair) use ($user, $connectedUserIds) {
+                $otherUserId = $pair->from_id == $user->id ? $pair->to_id : $pair->from_id;
+                return !in_array($otherUserId, $connectedUserIds); // Exclude connected users
+            })->map(function ($pair) use ($user) {
+                $other = $pair->from_id == $user->id ? $pair->toUser : $pair->fromUser;
+                return new ProfileResource($other);
+            });
+                return successResponse('Paired users retrieved', $pairedUsers);
+        }
+
+        if ($request->type === 'connected') {
+            if (!$user->current_room_id) {
+                return successResponse('No connected users', []);
+            }
+
+            $connections = Connection::with(['fromUser', 'toUser'])
+                ->where('room_id', $user->current_room_id)
+                ->where(function ($q) use ($user) {
+                    $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+                })
+                ->where('status', 'connected')
+                ->get();
+
+            $connectedUsers = $connections->map(function ($conn) use ($user) {
+                $other = $conn->from_id == $user->id ? $conn->toUser : $conn->fromUser;
+                return new ProfileResource($other);
+            });
+
+            return successResponse('Connected users retrieved', $connectedUsers);
+        }
+
+        if ($request->type === 'available') {
+            $oppositeRole = $user->role_id == 3 ? 2 : ($user->role_id == 2 ? 3 : null);
+            if (!$oppositeRole) {
+                return errorResponse('Invalid role_id for this operation', 403);
+            }
+
+            $pairings = Pairing::where(function ($q) use ($user) {
+                    $q->where('from_id', $user->id)->orWhere('to_id', $user->id);
+                })
+                ->get();
+
+            $pairedUserIds = $pairings->map(function ($pair) use ($user) {
+                return $pair->from_id == $user->id ? $pair->to_id : $pair->from_id;
+            })->unique()->all();
+
+            $availableUsers = User::where('role_id', $oppositeRole)
+                ->where('id', '!=', $user->id)
+                ->whereNotIn('id', array_merge($connectedUserIds, $pairedUserIds))
+                ->whereRaw(
+                    "(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?",
+                    [$user->latitude, $user->longitude, $user->latitude, 10 / 1000]
+                )
+                ->get();
+
+            return successResponse('Available users retrieved', ProfileResource::collection($availableUsers));
+        }
+
+        return errorResponse('Invalid type', 400);
+    } catch (\Throwable $th) {
+        return errorResponse($th->getMessage(), 500);
+    }
+}
 
 
 
@@ -464,203 +461,341 @@ class UserCommonController extends BaseController
     
     
     public function sendPairingRequest(Request $request)
-{
-    $request->validate([
-        'receiver_id' => 'required|exists:users,id',
-    ]);
-
-    $sender = auth()->user();
-    $receiver = User::find($request->receiver_id);
-
-    if (!$receiver) return errorResponse("User not found");
-    if ($receiver->current_room_id) return errorResponse("This receiver is already paired.");
-
-    \App\Models\Pairing::updateOrCreate(
-        ['from_id' => $sender->id, 'to_id' => $receiver->id],
-        ['status' => 'pending']
-    );
-
-    Cache::put('pairing_request_' . $sender->id, [
-        'sender_id' => $sender->id,
-        'receiver_id' => $receiver->id
-    ], now()->addSeconds(20));
-
-    // Broadcast pairing request with room id
-    broadcast(new PairingRequestSent($sender, $receiver, $sender->current_room_id));
-
-    NoRespond::dispatch($sender->id, $receiver->id)->delay(now()->addSeconds(15));
-
-    return successResponse('Pairing request sent');
-}
-
-   
-   public function acceptPairingRequest(Request $request)
-{
-    
-    
-    
-    
-    $request->validate([
-        'sender_id' => 'required|exists:users,id',
-    ]);
-
-    $receiver = auth()->user();
-    $sender = User::find($request->sender_id);
-
-    if (!$sender) {
-        return errorResponse("Sender not found");
-    }
-
-    // Make sure sender already has a room_id (should be set during updateLocation or pairing request)
-    if (!$sender->current_room_id) {
-        return errorResponse("Sender does not have a valid room ID");
-    }
-
-    $roomId = $sender->current_room_id;
-
-    // Update pairing status
-    \App\Models\Pairing::where('from_id', $sender->id)
-        ->where('to_id', $receiver->id)
-        ->update(['status' => 'paired']);
-
-    // Create connection
-    \App\Models\Connection::updateOrCreate(
-        ['from_id' => $sender->id, 'to_id' => $receiver->id],
-        ['room_id' => $roomId, 'status' => 'connected']
-    );
-
-    // Update both users with same room_id
-    $receiver->update(['current_room_id' => $roomId]);
-
-    // Optional: update sender again just in case (but not necessary if already set)
-    // $sender->update(['current_room_id' => $roomId]);
-
-    // Remove request from cache
-    Cache::forget('pairing_request_' . $sender->id);
-    
-   $connectedCounts =  \App\Models\Connection::where('status','connected')->count();
-    
-   
-
-    // Broadcast pairing accepted
-    broadcast(new PairingRequestAccepted($sender, $receiver, $roomId,$connectedCounts));
-
-    return successResponse('Pairing request accepted', ['room_id' => $roomId]);
-}
-
-
-public function exitRoomRequest(Request $request)
-{
-    $request->validate([
-        'room_id' => 'required|string',
-    ]);
-
-    $currentUser = auth()->user();
-    $roomId = $request->room_id;
-
-    $users = User::where('current_room_id', $roomId)->get();
-
-    // Admin leaves — disconnect all and end room
-    if ($currentUser->role_id == 3) {
-        // Disconnect all connections in the room
-        \App\Models\Connection::where('room_id', $roomId)
-            ->update(['status' => 'disconnected']);
-
-        // Clear current_room_id for all users
-        foreach ($users as $user) {
-            $user->update(['current_room_id' => null]);
-        }
-
-        broadcast(new RoomExited($roomId, $currentUser, true)); // true = admin
-        return successResponse("Admin left. Room ended for all.");
-    }
-
-    // Normal user leaves — disconnect their specific connection
-    \App\Models\Connection::where(function ($query) use ($currentUser) {
-        $query->where('from_id', $currentUser->id)
-              ->orWhere('to_id', $currentUser->id);
-    })->where('room_id', $roomId)
-      ->update(['status' => 'disconnected']);
-
-    // Clear current_room_id for the current user
-    $currentUser->update(['current_room_id' => null]);
-
-    broadcast(new RoomExited($roomId, $currentUser, false)); // false = not admin
-
-    return successResponse('You have left the room.');
-}
-    
-    
-public function rejectPairingRequest(Request $request)
-{
-    $request->validate([
-        'sender_id' => 'required|exists:users,id',
-    ]);
-
-    $receiver = auth()->user();
-    $sender = User::find($request->sender_id);
-
-    if (!$sender) return errorResponse("Sender not found");
-
-    \App\Models\Pairing::where('from_id', $sender->id)
-        ->where('to_id', $receiver->id)
-        ->update(['status' => 'removed']);
-
-    Cache::forget('pairing_request_' . $sender->id);
-
-    broadcast(new PairingRequestRejected($sender, $receiver));
-    return successResponse('Pairing request rejected');
-}
-
-
-   
-
-public function sendGroupMessage(Request $request)
-{
-    try {
-        $validated = $request->validate([
-            'room_id' => 'required|string|exists:connections,room_id',
-            'message' => 'nullable|string|required_without:attachment',
-            'attachment' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:3072|required_without:message',
+    {
+        $request->validate([
+            'receiver_id' => 'required|exists:users,id',
         ]);
-
-        $data = [
-            'sender_id' => Auth::id(),
-            'room_id' => $validated['room_id'],
-        ];
+    
+        $sender = auth()->user();
+        $receiver = User::find($request->receiver_id);
+    
+        if (!$receiver) return errorResponse("User not found");
+        if ($receiver->current_room_id) return errorResponse("This receiver is already paired.");
+    
+        \App\Models\Pairing::updateOrCreate(
+            ['from_id' => $sender->id, 'to_id' => $receiver->id],
+            ['status' => 'pending']
+        );
+    
+        Cache::put('pairing_request_' . $sender->id, [
+            'sender_id' => $sender->id,
+            'receiver_id' => $receiver->id
+        ], now()->addSeconds(20));
+    
+        // Broadcast pairing request with room id
+        broadcast(new PairingRequestSent($sender, $receiver, $sender->current_room_id));
+    
+        NoRespond::dispatch($sender->id, $receiver->id)->delay(now()->addSeconds(15));
+    
+        return successResponse('Pairing request sent');
+    }
+    
+       
+       public function acceptPairingRequest(Request $request)
+    {
         
+    
         
-       $sender = User::find(Auth::id(), ['id', 'name', 'avatar','created_at']);
-
+        $request->validate([
+            'sender_id' => 'required|exists:users,id',
+        ]);
+    
+        $receiver = auth()->user();
+        $sender = User::find($request->sender_id);
+    
         if (!$sender) {
             return errorResponse("Sender not found");
         }
     
-
-        // Handle attachment
-        if ($request->hasFile('attachment') && $request->file('attachment')->isValid()) {
-            try {
-                $uploadedPath = $request->file('attachment')->store('chat/attachments', 'public');
-                $data['attachment'] = $uploadedPath;
-            } catch (\Exception $e) {
-                return errorResponse('Image upload failed', 400);
-            }
+        // Make sure sender already has a room_id (should be set during updateLocation or pairing request)
+        if (!$sender->current_room_id) {
+            return errorResponse("Sender does not have a valid room ID");
         }
-
-        // Handle message
-        if ($request->filled('message')) {
-            $data['message'] = $validated['message'];
-        }
-
+    
+        $roomId = $sender->current_room_id;
+    
+        // Update pairing status
+        \App\Models\Pairing::where('from_id', $sender->id)
+            ->where('to_id', $receiver->id)
+            ->update(['status' => 'paired']);
+    
+        // Create connection
+        \App\Models\Connection::updateOrCreate(
+            ['from_id' => $sender->id, 'to_id' => $receiver->id],
+            ['room_id' => $roomId, 'status' => 'connected']
+        );
+    
+        // Update both users with same room_id
+        $receiver->update(['current_room_id' => $roomId]);
+    
+        // Optional: update sender again just in case (but not necessary if already set)
+        // $sender->update(['current_room_id' => $roomId]);
+    
+        // Remove request from cache
+        Cache::forget('pairing_request_' . $sender->id);
+        
+       $connectedCounts =  \App\Models\Connection::where('status','connected')->count();
+        
        
-         broadcast(new GroupMessageSent($sender, $data['message'], $validated['room_id']))->toOthers();
+    
+        // Broadcast pairing accepted
+        broadcast(new PairingRequestAccepted($sender, $receiver, $roomId,$connectedCounts));
+        broadcast(new PairingRequestAcceptedCount($roomId,$connectedCounts));
+    
+        return successResponse('Pairing request accepted', ['room_id' => $roomId]);
+    }
 
-        return successResponse('Message Broadcasted Successfully', $data);
 
+    public function exitRoomRequest(Request $request)
+    {
+        $request->validate([
+            'room_id' => 'required|string',
+        ]);
+    
+        $currentUser = auth()->user();
+        $roomId = $request->room_id;
+    
+        $users = User::where('current_room_id', $roomId)->get();
+    
+        // Admin leaves — disconnect all and end room
+        if ($currentUser->role_id == 3) {
+            // Disconnect all connections in the room
+            \App\Models\Connection::where('room_id', $roomId)
+                ->update(['status' => 'disconnected']);
+    
+            // Clear current_room_id for all users
+            foreach ($users as $user) {
+                $user->update(['current_room_id' => null]);
+            }
+    
+            broadcast(new RoomExited($roomId, $currentUser, true)); // true = admin
+            return successResponse("Admin left. Room ended for all.");
+        }
+    
+        // Normal user leaves — disconnect their specific connection
+        \App\Models\Connection::where(function ($query) use ($currentUser) {
+            $query->where('from_id', $currentUser->id)
+                  ->orWhere('to_id', $currentUser->id);
+        })->where('room_id', $roomId)
+          ->update(['status' => 'disconnected']);
+    
+        // Clear current_room_id for the current user
+        $currentUser->update(['current_room_id' => null]);
+    
+        broadcast(new RoomExited($roomId, $currentUser, false)); // false = not admin
+    
+        return successResponse('You have left the room.');
+    }
+    
+    
+    public function rejectPairingRequest(Request $request)
+    {
+        $request->validate([
+            'sender_id' => 'required|exists:users,id',
+        ]);
+    
+        $receiver = auth()->user();
+        $sender = User::find($request->sender_id);
+    
+        if (!$sender) return errorResponse("Sender not found");
+    
+        \App\Models\Pairing::where('from_id', $sender->id)
+            ->where('to_id', $receiver->id)
+            ->update(['status' => 'removed']);
+    
+        Cache::forget('pairing_request_' . $sender->id);
+    
+        broadcast(new PairingRequestRejected($sender, $receiver));
+        return successResponse('Pairing request rejected');
+    }
+
+
+   
+
+
+public function sendGroupMessage(Request $request)
+{
+    try {
+        
+      
+        // if ($request->hasFile('audio')) {
+        //     $file = $request->file('audio');
+        
+        //     dd([
+        //         'original_name' => $file->getClientOriginalName(), // e.g., audio.mp3
+        //         'extension'     => $file->getClientOriginalExtension(), // e.g., mp3
+        //         'mime_type'     => $file->getMimeType(), // e.g., audio/mpeg
+        //         'size_in_kb'    => round($file->getSize() / 1024, 2), // e.g., 420.55 KB
+        //     ]);
+        // }
+
+
+        $validated = $request->validate([
+            'room_id' => 'required|string',
+            'method'  => 'required|in:text,audio',
+            'message' => 'nullable|string|required_if:method,text',
+            'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav|required_if:method,audio',
+            'myself'  => 'nullable|string', // Expects 'true' as string
+        ]);
+        
+        
+         $sender = auth()->user();
+         
+         
+        // $publicAudioPath = null;
+        // if ($request->hasFile('audio')) {
+        //     $audio = $request->file('audio');
+        //     $storedPath = $audio->store('temp_audio', 'public'); // store in public disk
+        //     $publicAudioPath = asset('storage/' . $storedPath); // get full URL
+        // }
+       
+        // return successResponse("Text message broadcasted successfully.", [
+        //     'sender_id' => $sender->id,
+        //     'room_id' => '',
+        //     'message' => '',
+        //     'audio_url' => $publicAudioPath // null if no audio uploaded
+        // ]);
+
+        
+
+        if (!$sender) {
+            return errorResponse("Sender not found");
+        }
+
+        $room_id = $validated['room_id'];
+        $method  = $validated['method'];
+        $message = $validated['message'] ?? null;
+        $myself  = ($validated['myself'] ?? '') === 'true';
+        $roomUsers = null;
+        // Determine room users
+        if ($myself) {
+            
+            if ($sender->current_room_id != $room_id) {
+                return errorResponse("You are not in this room.");
+            }
+            $roomUsers = collect([$sender]);
+        } else {
+           
+            $roomUsers = User::where('current_room_id', $room_id)
+                ->where('id', '!=', $sender->id)
+                ->get();
+           
+        }
+        
+        
+
+
+        if (!$roomUsers) {
+            return errorResponse("No users found in this room.");
+        }
+
+        // === AUDIO Method ===
+        if ($method === 'audio') {
+            
+            if (!$request->hasFile('audio')) {
+                return errorResponse("Audio file is required for audio method.");
+            }
+            
+            foreach ($roomUsers as $receiver) {
+                
+               
+                $voicePath = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
+                
+                if($voicePath){
+                     broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath))->toOthers();  
+                }
+                else{
+                    return errorResponse("Extraction Failed");
+                }
+                 
+                
+                
+            }
+
+            return successResponse("Audio message sent successfully.");
+        }
+
+        // === TEXT Method ===
+        if ($method === 'text') {
+            if (empty($message)) {
+                return errorResponse("Text message is required for text method.");
+            }
+            
+            if($myself){
+                
+                // Text message broadcast (for display)
+                broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
+            
+                // // Voice generation for self
+                $voiceId = $sender->gender === 'female'
+                    ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
+                    : env('AWS_MALE_VOICE_ID', 'Matthew');
+                    
+                
+                // $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $sender);
+                $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
+                
+               
+                broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath))->toOthers();
+            
+                
+        
+    
+               
+                 
+            }
+            
+           
+            
+            // Text-to-speech conversion only if 2 users in room and sender is role_id 3
+            if ($roomUsers->count() === 1 && $sender->role_id == 3) {
+                $receiver = $roomUsers->first();
+
+                if ($receiver->role_id != 3) {
+                   
+                    $voiceId = $receiver->gender === 'female'
+                        ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
+                        : env('AWS_MALE_VOICE_ID', 'Matthew');
+
+
+                        if ($request->hasFile('audio')) {
+                            foreach ($roomUsers as $receiver) {
+                               $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $receiver);
+                               broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath))->toOthers();
+                            }
+                            
+                            
+                            return successResponse("Audio message sent to all room users.");
+                        }
+        
+                    $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $voiceId);
+
+                    broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath))->toOthers();
+                }
+            }
+            
+            if($roomUsers->count() >= 1 ){
+                broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
+            }
+            
+
+            return successResponse("Text message broadcasted successfully.", [
+                'sender_id' => $sender->id,
+                'room_id' => $room_id,
+                'message' => $message
+            ]);
+        }
+
+        return errorResponse("Invalid method.");
     } catch (\Exception $e) {
-        return errorResponse('Unable to broadcast message: ' . $e->getMessage(), 400);
+        return errorResponse("Unable to broadcast message: " . $e->getMessage(), 400);
     }
 }
+
+
+
+
+
 
 
 
@@ -793,29 +928,47 @@ public function sendGroupMessage(Request $request)
 
 protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
 {
-    $path = $audioFile->store('temp_audio', 'public');
-    $fullPath = public_path('storage/' . $path);
+    try {
+        // Store audio file
+        $path = $audioFile->store('temp_audio', 'public');
+        $fullPath = public_path('storage/' . $path);
 
-    $features = $this->extractAudioFeatures($fullPath);
+        // Extract audio features
+        $features = $this->extractAudioFeatures($fullPath);
 
+        if (!$features || !isset($features['status']) || $features['status'] !== 'success') {
+            // return errorResponse($features['message'] ?? 'Failed to extract features from audio', 404);
+            return false;
+        }
 
-    if (!$features || $features['status'] !== 'success') {
-        return errorResponse($features['message'] ?? 'Failed to extract features from audio', 404);
+        // Find closest matching sentence
+        $match = $this->findClosestAudioMatch($features['features']);
+        if (!$match) {
+            // return errorResponse('No matching sentence found', 404);
+            return false;
+        }
+
+        $sentence = Sentence::find($match->audioable_id);
+        if (!$sentence) {
+            // return errorResponse('Matched sentence not found', 404);
+            return false;
+        }
+
+        // Generate and return Polly voice response
+        $relativePath = $this->generatePollyVoiceOnce($roomId, $sentence->sentence, $sender, $receiver);
+
+        return successResponse([
+            'status' => 'success',
+            'matched_sentence' => $sentence->sentence,
+            'voice_file' => $relativePath
+        ]);
+        
+    } catch (\Throwable $e) {
+        return false;
+        return errorResponse('Server error: ' . $e->getMessage(), 500);
     }
-
-    $match = $this->findClosestAudioMatch($features['features']);
-
-    if (!$match) {
-        return errorResponse('No matching sentence found', 404);
-    }
-
-    $sentence = Sentence::find($match->audioable_id);
-    if (!$sentence) {
-        return errorResponse('Matched sentence not found', 404);
-    }
-
-    return $this->generatePollyVoice($roomId, $sentence->sentence, $sender, $receiver);
 }
+
 
 
 protected function extractAudioFeatures($filePath)
@@ -847,10 +1000,55 @@ protected function findClosestAudioMatch($extractedFeatures)
 /**
  * Convert Text to Speech using AWS Polly
  */
-private function generatePollyVoiceOnce($roomId, $text, $voiceId)
+// private function generatePollyVoiceOnce($roomId, $text, $voiceId)
+// {
+//     $messageHash = md5($text);
+//     $fileName = "room_voice_{$messageHash}_{$voiceId}.mp3";
+//     $relativePath = "room_voicemails/{$fileName}";
+//     $fullPath = storage_path("app/public/{$relativePath}");
+
+//     if (file_exists($fullPath)) {
+//         return $relativePath;
+//     }
+
+//     try {
+//         $pollyClient = new PollyClient([
+//             'version' => 'latest',
+//             'region' => env('AWS_DEFAULT_REGION'),
+//             'credentials' => [
+//                 'key' => env('AWS_ACCESS_KEY_ID'),
+//                 'secret' => env('AWS_SECRET_ACCESS_KEY'),
+//             ]
+//         ]);
+
+//         $result = $pollyClient->synthesizeSpeech([
+//             'Text' => $text,
+//             'OutputFormat' => 'mp3',
+//             'VoiceId' => $voiceId,
+//         ]);
+
+//         $audioStream = $result->get('AudioStream');
+
+//         if (!file_exists(dirname($fullPath))) {
+//             mkdir(dirname($fullPath), 0777, true);
+//         }
+
+//         file_put_contents($fullPath, $audioStream);
+
+//         return $relativePath;
+//     } catch (AwsException $e) {
+//         throw new \Exception('Failed to generate voice message: ' . $e->getMessage());
+//     }
+// }
+
+
+private function generatePollyVoiceOnce($roomId, $text, $sender, $receiver)
 {
+    $text = strip_tags((string) $text);
+    
+   
     $messageHash = md5($text);
-    $fileName = "room_voice_{$messageHash}_{$voiceId}.mp3";
+    $fileName = "room_voice_{$messageHash}_{$sender->id}.mp3";
     $relativePath = "room_voicemails/{$fileName}";
     $fullPath = storage_path("app/public/{$relativePath}");
 
@@ -858,35 +1056,34 @@ private function generatePollyVoiceOnce($roomId, $text, $voiceId)
         return $relativePath;
     }
 
-    try {
-        $pollyClient = new PollyClient([
-            'version' => 'latest',
-            'region' => env('AWS_DEFAULT_REGION'),
-            'credentials' => [
-                'key' => env('AWS_ACCESS_KEY_ID'),
-                'secret' => env('AWS_SECRET_ACCESS_KEY'),
-            ]
-        ]);
-
-        $result = $pollyClient->synthesizeSpeech([
-            'Text' => $text,
-            'OutputFormat' => 'mp3',
-            'VoiceId' => $voiceId,
-        ]);
-
-        $audioStream = $result->get('AudioStream');
-
-        if (!file_exists(dirname($fullPath))) {
-            mkdir(dirname($fullPath), 0777, true);
-        }
-
-        file_put_contents($fullPath, $audioStream);
-
-        return $relativePath;
-    } catch (AwsException $e) {
-        throw new \Exception('Failed to generate voice message: ' . $e->getMessage());
+    // Ensure directory exists
+    
+    if (!file_exists(dirname($fullPath))) {
+        mkdir(dirname($fullPath), 0777, true);
     }
+ 
+    // Escape input and call python TTS script
+    $escapedText = escapeshellarg($text);
+    $escapedPath = escapeshellarg($fullPath);
+    
+  
+
+    $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && "
+             . "python3 /home/appokfqz/app.appogramengineering.com/python/generate_tts.py $escapedText $escapedPath";
+
+    $output = shell_exec($command);
+    
+  
+    $response = json_decode($output, true);
+    
+    if ($response && $response['status'] === 'success' && file_exists($fullPath)) {
+        return $relativePath;
+    }
+
+    throw new \Exception('Failed to generate voice: ' . ($response['message'] ?? 'Unknown error'));
 }
+
+
 
 /**
  * Calculate Feature Distance for Audio Matching

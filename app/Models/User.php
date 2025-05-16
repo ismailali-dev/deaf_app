@@ -125,6 +125,22 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
         }
        
     }
+    public function getStatusAttribute($value)
+    {
+         
+            return (int)$value;
+         
+       
+    }
+     public function getRoleIdAttribute($value)
+    {
+         
+            return (int)$value;
+         
+       
+    }
+    
+    
     
     
      /**

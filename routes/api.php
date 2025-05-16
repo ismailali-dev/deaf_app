@@ -64,8 +64,6 @@ Route::group(['prefix'=>'common'], function () {
                 Route::post('send-message', 'BroadCastController@sendMessage');
                 Route::get('messages/{user}', 'BroadCastController@fetchMessages');
                 
-              
-                
             });
             
             //Recent Chats
