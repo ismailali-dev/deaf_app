@@ -747,7 +747,7 @@ public function sendGroupMessage(Request $request)
                 $voicePath = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
                 
                 if($voicePath){
-                     broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath))->toOthers();  
+                     broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();  
                 }
                 else{
                     return errorResponse("No Match Found! Try Again");
@@ -781,7 +781,7 @@ public function sendGroupMessage(Request $request)
                 $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
                 
                
-                broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath))->toOthers();
+                broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath,$method))->toOthers();
             
                 
         
@@ -806,7 +806,7 @@ public function sendGroupMessage(Request $request)
                         if ($request->hasFile('audio')) {
                             foreach ($roomUsers as $receiver) {
                                $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $receiver);
-                               broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath))->toOthers();
+                               broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();
                             }
                             
                             
@@ -816,7 +816,7 @@ public function sendGroupMessage(Request $request)
                     
                     $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender);
 
-                    broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath))->toOthers();
+                    broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath,$method))->toOthers();
                 }
             }
             
@@ -993,37 +993,35 @@ protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
         }
 
         // Find closest matching sentence
-        // $match = $this->findClosestAudioMatch($features['features']);
+        $match = $this->findClosestAudioMatch($features['features']);
         
        
-        // if (!$match) {
-        //     // return errorResponse('No matching sentence found', 404);
-        //     return false;
-        // }
+        if (!$match) {
+            // return errorResponse('No matching sentence found', 404);
+            return false;
+        }
         
         $sentence = "";
         
       
         
-        // if($match->audioable_type == 'App\Models\Word')
-        // {
-        //      $word = Word::find($match->audioable_id);
-        //      // Generate and return Polly voice response
-        //       if (!$word) {
-        //     // return errorResponse('Matched sentence not found', 404);
-        //     return false;
-        // }
-        //         $relativePath = $this->generatePollyVoiceOnce($roomId, $word->word, $sender, $receiver);
-        //         return $relativePath;
-        // }
-        // else{
-            $id=68;
-            $sentence = Sentence::find($id);
+        if($match->audioable_type == 'App\Models\Word')
+        {
+                $word = Word::find($match->audioable_id);
+                if (!$word) {
+                return false;
+                }
+                $relativePath = $this->generatePollyVoiceOnce($roomId, $word->word, $sender, $receiver);
+                return $relativePath;
+        }
+        else{
+            
+            $sentence = Sentence::find($match->audioable_id);
             
             
             
               if (!$sentence) {
-                // return errorResponse('Matched sentence not found', 404);
+                return errorResponse('Matched sentence not found', 404);
                 return false;
             }
         
@@ -1031,13 +1029,8 @@ protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
             $relativePath = $this->generatePollyVoiceOnce($roomId, $sentence->sentence, $sender, $receiver);
            
             return $relativePath;
-        // }
+        }
        
-        
-
-        
-        
-        
         
 
         // return successResponse([
@@ -1056,39 +1049,13 @@ protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
 
 protected function extractAudioFeatures($filePath)
 {
-    $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && "
-             . "python /home/appokfqz/app.appogramengineering.com/python/test_audio_features.py " . escapeshellarg($filePath);
-
+    
+    $baseCommand = config('python.feature_script');
+    $command = $baseCommand . ' ' . escapeshellarg($filePath);
     $output = shell_exec($command);
     return json_decode($output, true);
 }
 
-// protected function calculateFeatureDistance(array $features1, array $features2): float
-// {
-//     // Extract individual features
-//     $mfcc1 = $features1['mfcc'];
-//     $chroma1 = $features1['chroma'];
-//     $spectral1 = $features1['spectral_contrast'];
-
-//     $mfcc2 = $features2['mfcc'];
-//     $chroma2 = $features2['chroma'];
-//     $spectral2 = $features2['spectral_contrast'];
-
-//     // Calculate Euclidean distances for each feature group
-//     $distMfcc = $this->euclideanDistance($mfcc1, $mfcc2);
-//     $distChroma = $this->euclideanDistance($chroma1, $chroma2);
-//     $distSpectral = $this->euclideanDistance($spectral1, $spectral2);
-
-//     // Assign weights (adjust as needed)
-//     $wMfcc = 0.5;
-//     $wChroma = 0.3;
-//     $wSpectral = 0.2;
-
-//     // Weighted sum of distances
-//     $totalDistance = $wMfcc * $distMfcc + $wChroma * $distChroma + $wSpectral * $distSpectral;
-
-//     return $totalDistance;
-// }
 
 protected function euclideanDistance(array $vec1, array $vec2): float
 {
@@ -1190,8 +1157,8 @@ private function generatePollyVoiceOnce($roomId, $text, $sender, $receiver=null)
     $escapedText = escapeshellarg($text);
     $escapedPath = escapeshellarg($fullPath);
 
-    $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && "
-             . "python3 /home/appokfqz/app.appogramengineering.com/python/generate_tts.py $escapedText $escapedPath";
+    $baseCommand = config('python.tts_script');
+    $command = "$baseCommand $escapedText $escapedPath";
 
     $output = shell_exec($command);
     

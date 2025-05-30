@@ -19,13 +19,15 @@ class RoomVoiceMessage implements ShouldBroadcastNow
     public $sender;
     public $receiver;
     public $voicePath;
+    public $method;
 
-    public function __construct($roomId, User $sender, User $receiver, $voicePath)
+    public function __construct($roomId, User $sender, User $receiver, $voicePath,$method)
     {
         $this->roomId = $roomId;
         $this->sender = $sender;
         $this->receiver = $receiver;
         $this->voicePath = $voicePath;
+        $this->method = $method;
     }
 
     public function broadcastOn()
@@ -45,6 +47,7 @@ class RoomVoiceMessage implements ShouldBroadcastNow
             'room_id' => $this->roomId,
             'sender' => $this->sender,
             'receiver' => $this->receiver,
+            'method' => $this->method,
             'voice_path' => asset('public/storage/' . $this->voicePath),
         ];
     }

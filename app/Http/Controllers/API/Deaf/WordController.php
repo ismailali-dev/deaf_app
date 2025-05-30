@@ -102,10 +102,9 @@ class WordController extends BaseController
                 
                 $fullPath = base_path('public/storage/'.$path); // Full path to pass to Python
                 
-    
-                // Python command to extract features
-                $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && " .
-                    "python /home/appokfqz/app.appogramengineering.com/python/test_audio_features.py " . escapeshellarg($fullPath);
+                $baseCommand = config('python.feature_script');
+                $command = $baseCommand . ' ' . escapeshellarg($fullPath);
+                
     
                 $output = shell_exec($command);
                  
@@ -160,8 +159,8 @@ class WordController extends BaseController
             
     
             // Step 1: Extract features using Python
-            $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && "
-                . "python /home/appokfqz/app.appogramengineering.com/python/test_audio_features.py " . escapeshellarg($fullPath);
+            $baseCommand = config('python.feature_script');
+            $command = $baseCommand . ' ' . escapeshellarg($fullPath);
     
             $output = shell_exec($command);
             $features = json_decode($output, true);
