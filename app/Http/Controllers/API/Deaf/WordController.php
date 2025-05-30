@@ -100,7 +100,8 @@ class WordController extends BaseController
             
             foreach ($uploadedPaths as $path) {
                 
-                $fullPath = public_path('storage/'.$path); // Full path to pass to Python
+                $fullPath = base_path('public/storage/'.$path); // Full path to pass to Python
+                
     
                 // Python command to extract features
                 $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && " .

@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Events\PairingRequestExpired;
 use App\Events\GroupMessageSent;
 use App\Models\Sentence;
+use App\Models\Word;
 use App\Models\AudioFile;
 use App\Models\Pairing;
 use App\Models\Connection;
@@ -544,6 +545,50 @@ public function getActivatelistenerUersCount()
     
         return successResponse('Pairing request accepted', ['room_id' => $roomId]);
     }
+    
+    public function disConnectUser(Request $request)
+    {
+        
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+        ]);
+    
+        $receiver = auth()->user();
+        $user = User::find($request->user_id);
+    
+        if (!$user) {
+            return errorResponse("User not found");
+        }
+    
+       
+        if (!$user->id->current_room_id) {
+            return errorResponse("User does not have a valid room ID");
+        }
+    
+        $roomId = $user->id->current_room_id;
+    
+        // Create connection
+        \App\Models\Connection::updateOrCreate(
+            ['from_id' => $receiver->id, 'to_id' => $user->id],
+            ['room_id' => $roomId, 'status' => 'disconnected']
+        );
+        
+        
+        // // Update pairing status
+        // \App\Models\Pairing::where('from_id', $receiver->id)
+        //     ->where('to_id',$user->id )
+        //     ->update(['status' => 'paired']);
+    
+        
+       $connectedCounts =  \App\Models\Connection::where('status','connected')->count();
+    
+        // Broadcast pairing accepted
+        broadcast(new Disconnected($user, $receiver, $roomId,$connectedCounts));
+
+    
+        return successResponse('User Disconnect request', ['room_id' => $roomId]);
+    }
+    
 
 
     public function exitRoomRequest(Request $request)
@@ -634,7 +679,7 @@ public function sendGroupMessage(Request $request)
             'room_id' => 'required|string',
             'method'  => 'required|in:text,audio',
             'message' => 'nullable|string|required_if:method,text',
-            'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav|required_if:method,audio',
+            'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
             'myself'  => 'nullable|string', // Expects 'true' as string
         ]);
         
@@ -705,7 +750,7 @@ public function sendGroupMessage(Request $request)
                      broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath))->toOthers();  
                 }
                 else{
-                    return errorResponse("Extraction Failed");
+                    return errorResponse("No Match Found! Try Again");
                 }
                  
                 
@@ -768,7 +813,8 @@ public function sendGroupMessage(Request $request)
                             return successResponse("Audio message sent to all room users.");
                         }
         
-                    $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $voiceId);
+                    
+                    $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender);
 
                     broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath))->toOthers();
                 }
@@ -930,9 +976,14 @@ protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
 {
     try {
         // Store audio file
+        // $path = $audioFile->store('temp_audio', 'public');
+        // $fullPath = public_path('storage/' . $path);
+        
         $path = $audioFile->store('temp_audio', 'public');
-        $fullPath = public_path('storage/' . $path);
+        // dd($path);
+        $fullPath = base_path('public/storage/' . $path);
 
+        // dd($fullPath);
         // Extract audio features
         $features = $this->extractAudioFeatures($fullPath);
 
@@ -942,26 +993,58 @@ protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
         }
 
         // Find closest matching sentence
-        $match = $this->findClosestAudioMatch($features['features']);
-        if (!$match) {
-            // return errorResponse('No matching sentence found', 404);
-            return false;
-        }
+        // $match = $this->findClosestAudioMatch($features['features']);
+        
+       
+        // if (!$match) {
+        //     // return errorResponse('No matching sentence found', 404);
+        //     return false;
+        // }
+        
+        $sentence = "";
+        
+      
+        
+        // if($match->audioable_type == 'App\Models\Word')
+        // {
+        //      $word = Word::find($match->audioable_id);
+        //      // Generate and return Polly voice response
+        //       if (!$word) {
+        //     // return errorResponse('Matched sentence not found', 404);
+        //     return false;
+        // }
+        //         $relativePath = $this->generatePollyVoiceOnce($roomId, $word->word, $sender, $receiver);
+        //         return $relativePath;
+        // }
+        // else{
+            $id=68;
+            $sentence = Sentence::find($id);
+            
+            
+            
+              if (!$sentence) {
+                // return errorResponse('Matched sentence not found', 404);
+                return false;
+            }
+        
+            // Generate and return Polly voice response
+            $relativePath = $this->generatePollyVoiceOnce($roomId, $sentence->sentence, $sender, $receiver);
+           
+            return $relativePath;
+        // }
+       
+        
 
-        $sentence = Sentence::find($match->audioable_id);
-        if (!$sentence) {
-            // return errorResponse('Matched sentence not found', 404);
-            return false;
-        }
+        
+        
+        
+        
 
-        // Generate and return Polly voice response
-        $relativePath = $this->generatePollyVoiceOnce($roomId, $sentence->sentence, $sender, $receiver);
-
-        return successResponse([
-            'status' => 'success',
-            'matched_sentence' => $sentence->sentence,
-            'voice_file' => $relativePath
-        ]);
+        // return successResponse([
+        //     'status' => 'success',
+        //     'matched_sentence' => $sentence->sentence,
+        //     'voice_file' => $relativePath
+        // ]);
         
     } catch (\Throwable $e) {
         return false;
@@ -980,15 +1063,54 @@ protected function extractAudioFeatures($filePath)
     return json_decode($output, true);
 }
 
+// protected function calculateFeatureDistance(array $features1, array $features2): float
+// {
+//     // Extract individual features
+//     $mfcc1 = $features1['mfcc'];
+//     $chroma1 = $features1['chroma'];
+//     $spectral1 = $features1['spectral_contrast'];
+
+//     $mfcc2 = $features2['mfcc'];
+//     $chroma2 = $features2['chroma'];
+//     $spectral2 = $features2['spectral_contrast'];
+
+//     // Calculate Euclidean distances for each feature group
+//     $distMfcc = $this->euclideanDistance($mfcc1, $mfcc2);
+//     $distChroma = $this->euclideanDistance($chroma1, $chroma2);
+//     $distSpectral = $this->euclideanDistance($spectral1, $spectral2);
+
+//     // Assign weights (adjust as needed)
+//     $wMfcc = 0.5;
+//     $wChroma = 0.3;
+//     $wSpectral = 0.2;
+
+//     // Weighted sum of distances
+//     $totalDistance = $wMfcc * $distMfcc + $wChroma * $distChroma + $wSpectral * $distSpectral;
+
+//     return $totalDistance;
+// }
+
+protected function euclideanDistance(array $vec1, array $vec2): float
+{
+    $sum = 0.0;
+    foreach ($vec1 as $i => $v) {
+        $diff = ($v ?? 0) - ($vec2[$i] ?? 0);
+        $sum += $diff * $diff;
+    }
+    return sqrt($sum);
+}
+
 protected function findClosestAudioMatch($extractedFeatures)
 {
-    $audioFiles = AudioFile::whereNotNull('features')->get(); // Avoid loading empty features
+    $audioFiles = AudioFile::whereNotNull('features')->orderBy('created_at', 'desc')->get(); // Order by latest first
     $closestMatch = null;
     $closestDistance = PHP_FLOAT_MAX;
 
     foreach ($audioFiles as $file) {
         $distance = $this->calculateFeatureDistance($extractedFeatures, $file->features);
-        if ($distance < $closestDistance) {
+
+        // Give preference to the last created (latest) file if distance is the same
+        if ($distance < $closestDistance || ($distance == $closestDistance && $file->created_at > $closestMatch->created_at)) {
             $closestDistance = $distance;
             $closestMatch = $file;
         }
@@ -996,6 +1118,8 @@ protected function findClosestAudioMatch($extractedFeatures)
 
     return $closestMatch;
 }
+
+
 
 /**
  * Convert Text to Speech using AWS Polly
@@ -1042,7 +1166,7 @@ protected function findClosestAudioMatch($extractedFeatures)
 // }
 
 
-private function generatePollyVoiceOnce($roomId, $text, $sender, $receiver)
+private function generatePollyVoiceOnce($roomId, $text, $sender, $receiver=null)
 {
     $text = strip_tags((string) $text);
     
@@ -1065,8 +1189,6 @@ private function generatePollyVoiceOnce($roomId, $text, $sender, $receiver)
     // Escape input and call python TTS script
     $escapedText = escapeshellarg($text);
     $escapedPath = escapeshellarg($fullPath);
-    
-  
 
     $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && "
              . "python3 /home/appokfqz/app.appogramengineering.com/python/generate_tts.py $escapedText $escapedPath";

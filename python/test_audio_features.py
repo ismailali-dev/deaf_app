@@ -10,14 +10,16 @@ import soundfile as sf
 
 def remove_noise(audio_file):
     try:
-        # Load audio file
+        # Load audio file (librosa supports wav, ogg, mp3 etc.)
         y, sr = librosa.load(audio_file, sr=None)
 
         # Apply noise reduction
         reduced_noise = nr.reduce_noise(y=y, sr=sr)
 
         # Save noise-reduced file
-        clean_audio_path = audio_file.replace(".wav", "_clean.wav")
+        # Extension independent replacement: replace extension with _clean.wav
+        base = os.path.splitext(audio_file)[0]
+        clean_audio_path = base + "_clean.wav"
         sf.write(clean_audio_path, reduced_noise, sr)
 
         return clean_audio_path, reduced_noise, sr

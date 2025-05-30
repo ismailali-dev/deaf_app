@@ -100,6 +100,7 @@ Route::group(['prefix'=>'common'], function () {
                 Route::post('/exit-room-request', 'UserCommonController@exitRoomRequest');
                 Route::post('/send-group-messsage', 'UserCommonController@sendGroupMessage');
                 Route::post('/send-voice-messsage', 'UserCommonController@sendVoiceMessage');
+                Route::post('/disconnect-user', 'UserCommonController@disConnectUser');
                 
                 // Route::get('/nearby-users', [UserController::class, 'getNearbyUsers']);
                 // Route::post('/connect', [UserController::class, 'connectUser']);
