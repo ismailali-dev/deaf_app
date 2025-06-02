@@ -26,8 +26,10 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use App\Events\PairingRequestExpired;
 use App\Events\GroupMessageSent;
+use App\Events\Disconnected;
 use App\Models\Sentence;
 use App\Models\Word;
+use App\Models\ListenerSetting;
 use App\Models\AudioFile;
 use App\Models\Pairing;
 use App\Models\Connection;
@@ -233,8 +235,22 @@ class UserCommonController extends BaseController
                 broadcast(new RoomCreated($user, $roomId));
             }
     
-            $data['room_id'] = $roomId;
+            
+            $setting = ListenerSetting::where('user_id', $user->id)->first();
+
+            // Prepare listener settings as an array of boolean values or defaults if null
+            $listenerSettings = [
+                'autosend'     => $setting->autosend ?? false,
+                'notification' => $setting->notification ?? false,
+                'mute'         => $setting->mute ?? true,
+            ];
     
+            $data = [
+                'room_id'           => $roomId,
+                'listener_settings' => $listenerSettings,
+            ];
+    
+ 
             return successResponse('Location updated successfully', $data);
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
@@ -461,6 +477,43 @@ public function getActivatelistenerUersCount()
     // }
     
     
+    public function saveListenerSetting(Request $request)
+    {
+        
+        
+        $validated = $request->validate([
+            'autosend' => 'nullable|boolean',
+            'notification' => 'nullable|boolean',
+            'mute' => 'nullable|boolean',
+        ]);
+    
+        $user = auth()->user();
+    
+        // Allowed keys to update
+        $fields = ['autosend', 'notification', 'mute'];
+    
+        // Filter only valid keys from request
+        $data = collect($request->only($fields))->filter(function ($value) {
+            return !is_null($value);
+        })->toArray();
+    
+        // Return error if nothing to update
+        if (empty($data)) {
+            return errorResponse("No valid settings provided.");
+        }
+    
+        // Get or create setting record
+        $setting = ListenerSetting::firstOrCreate(
+            ['user_id' => $user->id],
+            [] // default values if needed
+        );
+    
+        // Update only provided fields
+        $setting->update($data);
+    
+        return successResponse("Settings updated successfully.");
+    }
+    
     public function sendPairingRequest(Request $request)
     {
         $request->validate([
@@ -490,7 +543,7 @@ public function getActivatelistenerUersCount()
     
         return successResponse('Pairing request sent');
     }
-    
+
        
        public function acceptPairingRequest(Request $request)
     {
@@ -548,48 +601,55 @@ public function getActivatelistenerUersCount()
     
     public function disConnectUser(Request $request)
     {
-        
         $request->validate([
             'user_id' => 'required|exists:users,id',
         ]);
     
-        $receiver = auth()->user();
-        $user = User::find($request->user_id);
+        try {
+            $authUser = auth()->user();
+            $otherUser = User::find($request->user_id);
     
-        if (!$user) {
-            return errorResponse("User not found");
+            // Check if the user exists (redundant but safe)
+            if (!$otherUser) {
+                return errorResponse("User not found");
+            }
+    
+            // Make sure both users are in the same room
+            if (!$authUser->current_room_id || $authUser->current_room_id !== $otherUser->current_room_id) {
+                return errorResponse("Users are not in the same room or missing room ID");
+            }
+    
+            $roomId = $authUser->current_room_id;
+    
+            // Disconnect the connection (in either direction)
+            Connection::where(function ($q) use ($authUser, $otherUser) {
+                    $q->where('from_id', $authUser->id)->where('to_id', $otherUser->id);
+                })
+                ->orWhere(function ($q) use ($authUser, $otherUser) {
+                    $q->where('from_id', $otherUser->id)->where('to_id', $authUser->id);
+                })
+                ->update([
+                    'status' => 'disconnected',
+                    'room_id' => $roomId
+                ]);
+    
+            // Get the updated connected count for the room
+            $connectedCounts = Connection::where('room_id', $roomId)
+                ->where('status', 'connected')
+                ->count();
+    
+            // Broadcast the disconnection event
+            broadcast(new Disconnected($authUser, $otherUser, $roomId, $connectedCounts));
+    
+            return successResponse('User disconnected successfully', [
+                'room_id' => $roomId,
+                'connected_count' => $connectedCounts
+            ]);
+        } catch (\Throwable $th) {
+            return errorResponse($th->getMessage(), 500);
         }
-    
-       
-        if (!$user->id->current_room_id) {
-            return errorResponse("User does not have a valid room ID");
-        }
-    
-        $roomId = $user->id->current_room_id;
-    
-        // Create connection
-        \App\Models\Connection::updateOrCreate(
-            ['from_id' => $receiver->id, 'to_id' => $user->id],
-            ['room_id' => $roomId, 'status' => 'disconnected']
-        );
-        
-        
-        // // Update pairing status
-        // \App\Models\Pairing::where('from_id', $receiver->id)
-        //     ->where('to_id',$user->id )
-        //     ->update(['status' => 'paired']);
-    
-        
-       $connectedCounts =  \App\Models\Connection::where('status','connected')->count();
-    
-        // Broadcast pairing accepted
-        broadcast(new Disconnected($user, $receiver, $roomId,$connectedCounts));
-
-    
-        return successResponse('User Disconnect request', ['room_id' => $roomId]);
     }
-    
-
+        
 
     public function exitRoomRequest(Request $request)
     {
@@ -657,13 +717,7 @@ public function getActivatelistenerUersCount()
 
    
 
-
-public function sendGroupMessage(Request $request)
-{
-    try {
-        
-      
-        // if ($request->hasFile('audio')) {
+  // if ($request->hasFile('audio')) {
         //     $file = $request->file('audio');
         
         //     dd([
@@ -673,36 +727,157 @@ public function sendGroupMessage(Request $request)
         //         'size_in_kb'    => round($file->getSize() / 1024, 2), // e.g., 420.55 KB
         //     ]);
         // }
+        
+// public function sendGroupMessage(Request $request)
+// {
+//     try {
+        
+//         $validated = $request->validate([
+//             'room_id' => 'required|string',
+//             'method'  => 'required|in:text,audio',
+//             'message' => 'nullable|string|required_if:method,text',
+//             'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
+//             'myself'  => 'nullable|string', // Expects 'true' as string
+//         ]);
+    
+//         $sender = auth()->user();
+
+//         if (!$sender) {
+//             return errorResponse("Sender not found");
+//         }
+
+//         $room_id = $validated['room_id'];
+//         $method  = $validated['method'];
+//         $message = $validated['message'] ?? null;
+//         $myself  = ($validated['myself'] ?? '') === 'true';
+//         $roomUsers = null;
+//         // Determine room users
+//         if ($myself) {
+            
+//             if ($sender->current_room_id != $room_id) {
+//                 return errorResponse("You are not in this room.");
+//             }
+//             $roomUsers = collect([$sender]);
+//         } else {
+           
+//             $roomUsers = User::where('current_room_id', $room_id)
+//                 ->where('id', '!=', $sender->id)
+//                 ->get();
+           
+//         }
+
+//         if (!$roomUsers) {
+//             return errorResponse("No users found in this room.");
+//         }
+
+//         // === AUDIO Method ===
+//         if ($method === 'audio') {
+            
+//             if (!$request->hasFile('audio')) {
+//                 return errorResponse("Audio file is required for audio method.");
+//             }
+            
+//             foreach ($roomUsers as $receiver) {
+                
+               
+//                 $voicePath = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
+                
+//                 if($voicePath){
+//                      broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();  
+//                 }
+//                 else{
+//                     return errorResponse("No Match Found! Try Again");
+//                 }
+                 
+                
+                
+//             }
+
+//             return successResponse("Audio message sent successfully.");
+//         }
+
+//         // === TEXT Method ===
+//         if ($method === 'text') {
+//             if (empty($message)) {
+//                 return errorResponse("Text message is required for text method.");
+//             }
+            
+//             if($myself){
+                
+//                 // Text message broadcast (for display)
+//                 broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
+            
+//                 // // Voice generation for self
+//                 $voiceId = $sender->gender === 'female'
+//                     ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
+//                     : env('AWS_MALE_VOICE_ID', 'Matthew');
+                    
+//                 $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
+//                 broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath,$method))->toOthers();
+            
+             
+//             }
+
+//             // Text-to-speech conversion only if 2 users in room and sender is role_id 3
+//             if ($roomUsers->count() === 1 && $sender->role_id == 3) {
+//                 $receiver = $roomUsers->first();
+
+//                 if ($receiver->role_id != 3) {
+                   
+//                     $voiceId = $receiver->gender === 'female'
+//                         ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
+//                         : env('AWS_MALE_VOICE_ID', 'Matthew');
 
 
+//                         if ($request->hasFile('audio')) {
+//                             foreach ($roomUsers as $receiver) {
+//                               $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $receiver);
+//                               broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();
+//                             }
+                            
+                            
+//                             return successResponse("Audio message sent to all room users.");
+//                         }
+        
+                    
+//                     $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender);
+
+//                     broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath,$method))->toOthers();
+//                 }
+//             }
+            
+//             if($roomUsers->count() >= 1 ){
+//                 broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
+//             }
+            
+
+//             return successResponse("Text message broadcasted successfully.", [
+//                 'sender_id' => $sender->id,
+//                 'room_id' => $room_id,
+//                 'message' => $message
+//             ]);
+//         }
+
+//         return errorResponse("Invalid method.");
+//     } catch (\Exception $e) {
+//         return errorResponse("Unable to broadcast message: " . $e->getMessage(), 400);
+//     }
+// }
+
+
+
+public function sendGroupMessage(Request $request)
+{
+    try {
         $validated = $request->validate([
             'room_id' => 'required|string',
             'method'  => 'required|in:text,audio',
             'message' => 'nullable|string|required_if:method,text',
-            'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
-            'myself'  => 'nullable|string', // Expects 'true' as string
+            'audio'   => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
+            'myself'  => 'nullable|string',
         ]);
-        
-        
-         $sender = auth()->user();
-         
-         
-        // $publicAudioPath = null;
-        // if ($request->hasFile('audio')) {
-        //     $audio = $request->file('audio');
-        //     $storedPath = $audio->store('temp_audio', 'public'); // store in public disk
-        //     $publicAudioPath = asset('storage/' . $storedPath); // get full URL
-        // }
-       
-        // return successResponse("Text message broadcasted successfully.", [
-        //     'sender_id' => $sender->id,
-        //     'room_id' => '',
-        //     'message' => '',
-        //     'audio_url' => $publicAudioPath // null if no audio uploaded
-        // ]);
 
-        
-
+        $sender = auth()->user();
         if (!$sender) {
             return errorResponse("Sender not found");
         }
@@ -711,119 +886,57 @@ public function sendGroupMessage(Request $request)
         $method  = $validated['method'];
         $message = $validated['message'] ?? null;
         $myself  = ($validated['myself'] ?? '') === 'true';
-        $roomUsers = null;
-        // Determine room users
-        if ($myself) {
-            
-            if ($sender->current_room_id != $room_id) {
-                return errorResponse("You are not in this room.");
-            }
-            $roomUsers = collect([$sender]);
-        } else {
-           
-            $roomUsers = User::where('current_room_id', $room_id)
-                ->where('id', '!=', $sender->id)
-                ->get();
-           
-        }
-        
-        
 
+        // Fetch all users in room INCLUDING sender
+        $roomUsers = User::where('current_room_id', $room_id)->get();
 
-        if (!$roomUsers) {
+        if ($roomUsers->isEmpty()) {
             return errorResponse("No users found in this room.");
         }
 
-        // === AUDIO Method ===
+        // Get mute settings for all users in one query
+        $muteMap = ListenerSetting::whereIn('user_id', $roomUsers->pluck('id'))
+            ->pluck('mute', 'user_id')
+            ->map(fn($mute) => (bool)$mute);
+
         if ($method === 'audio') {
-            
             if (!$request->hasFile('audio')) {
-                return errorResponse("Audio file is required for audio method.");
+                return errorResponse("Audio file is required.");
             }
-            
+
             foreach ($roomUsers as $receiver) {
-                
-               
+                if ($muteMap[$receiver->id] ?? true) {
+                    // User muted or no setting found (assume muted)
+                    continue;
+                }
+
                 $voicePath = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
-                
-                if($voicePath){
-                     broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();  
+                if ($voicePath) {
+                    broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath, $method))->toOthers();
                 }
-                else{
-                    return errorResponse("No Match Found! Try Again");
-                }
-                 
-                
-                
             }
 
             return successResponse("Audio message sent successfully.");
         }
 
-        // === TEXT Method ===
         if ($method === 'text') {
             if (empty($message)) {
                 return errorResponse("Text message is required for text method.");
             }
-            
-            if($myself){
-                
-                // Text message broadcast (for display)
-                broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
-            
-                // // Voice generation for self
-                $voiceId = $sender->gender === 'female'
-                    ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
-                    : env('AWS_MALE_VOICE_ID', 'Matthew');
-                    
-                
-                // $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $sender);
-                $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
-                
-               
-                broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath,$method))->toOthers();
-            
-                
-        
-    
-               
-                 
-            }
-            
-           
-            
-            // Text-to-speech conversion only if 2 users in room and sender is role_id 3
-            if ($roomUsers->count() === 1 && $sender->role_id == 3) {
-                $receiver = $roomUsers->first();
 
-                if ($receiver->role_id != 3) {
-                   
-                    $voiceId = $receiver->gender === 'female'
-                        ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
-                        : env('AWS_MALE_VOICE_ID', 'Matthew');
+            // Broadcast text message to others (excluding sender)
+            broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
 
-
-                        if ($request->hasFile('audio')) {
-                            foreach ($roomUsers as $receiver) {
-                               $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $receiver);
-                               broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();
-                            }
-                            
-                            
-                            return successResponse("Audio message sent to all room users.");
-                        }
-        
-                    
-                    $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender);
-
-                    broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath,$method))->toOthers();
+            // For voice conversion - send to all unmuted users INCLUDING sender
+            foreach ($roomUsers as $receiver) {
+                if ($muteMap[$receiver->id] ?? true) {
+                    continue;
                 }
+
+                // For Polly voice generation, you may want to customize who triggers this.
+                $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender, $receiver);
+                broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath, $method))->toOthers();
             }
-            
-            if($roomUsers->count() >= 1 ){
-                broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
-            }
-            
 
             return successResponse("Text message broadcasted successfully.", [
                 'sender_id' => $sender->id,
@@ -837,10 +950,6 @@ public function sendGroupMessage(Request $request)
         return errorResponse("Unable to broadcast message: " . $e->getMessage(), 400);
     }
 }
-
-
-
-
 
 
 

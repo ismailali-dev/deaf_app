@@ -101,7 +101,7 @@ Route::group(['prefix'=>'common'], function () {
                 Route::post('/send-group-messsage', 'UserCommonController@sendGroupMessage');
                 Route::post('/send-voice-messsage', 'UserCommonController@sendVoiceMessage');
                 Route::post('/disconnect-user', 'UserCommonController@disConnectUser');
-                
+                Route::post('/save-listener-setting', 'UserCommonController@saveListenerSetting');
                 // Route::get('/nearby-users', [UserController::class, 'getNearbyUsers']);
                 // Route::post('/connect', [UserController::class, 'connectUser']);
                 // Route::post('/disconnect', [UserController::class, 'disconnectUser']);

@@ -107,6 +107,12 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
     }
     
     
+    public function listenerSetting()
+    {
+        return $this->hasOne(ListenerSetting::class);
+    }
+
+    
     public function setPasswordAttribute($value)
     {
         $this->attributes['password'] = bcrypt($value);
