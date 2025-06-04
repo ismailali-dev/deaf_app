@@ -28,7 +28,7 @@ class RoomExited implements ShouldBroadcastNow
 
     public function broadcastOn()
     {
-        return new Channel('room.' . $this->roomId);
+        return new PrivateChannel('room.' . $this->roomId);
     }
 
     public function broadcastAs()

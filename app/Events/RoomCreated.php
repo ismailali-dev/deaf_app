@@ -32,8 +32,8 @@ class RoomCreated implements ShouldBroadcastNow
        
         
         return [
-            new Channel('room.' . $this->roomId),
-            new Channel('pairing.' . $this->user->id),
+            new PrivateChannel('room.' . $this->roomId),
+            new PrivateChannel('pairing.' . $this->user->id),
         ];
     }
 

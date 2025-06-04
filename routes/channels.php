@@ -26,6 +26,25 @@ Broadcast::channel('private-chat.{receiverId}', function ($user, $receiverId) {
 });
 
 
+
+
+Broadcast::channel('room.{roomId}', function ($user, $roomId) {
+    return $user->current_room_id == $roomId;
+});
+
+
 Broadcast::channel('pairing.{receiverId}', function ($user, $receiverId) {
-    return (int) $user->id === (int) $receiverId;
+    return $user && ((int) $user->id === (int) $receiverId);
+    
+    \Log::info('Broadcast user:', ['user' => $user]);
+    return $user && ((int) $user->id === (int) $receiverId);
+});
+
+Broadcast::channel('pairing.{id}', function ($user, $id) {
+     return true;
+});
+
+
+Broadcast::channel('user.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
 });

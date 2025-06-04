@@ -32,12 +32,18 @@ class RoomVoiceMessage implements ShouldBroadcastNow
 
     public function broadcastOn()
     {
-        return new Channel('room.' . $this->roomId);
+        return new PrivateChannel('room.' . $this->roomId);
     }
 
     public function broadcastAs()
     {
-        return 'room.voice.message';
+        if($this->receiver->role_id == 2){
+            return 'listener.room.voice.message';
+        }
+        else{
+            return 'room.voice.message';
+        }
+        
     }
 
     public function broadcastWith()

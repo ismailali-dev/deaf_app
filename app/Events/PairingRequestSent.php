@@ -25,10 +25,13 @@ class PairingRequestSent implements ShouldBroadcastNow
         $this->expiresAt = now()->addMinutes(5); // Expiry time
     }
 
+    
     public function broadcastOn()
     {
-        return new Channel('pairing.'.$this->receiver->id);
+        // Only this user will hear it
+        return new PrivateChannel('pairing.' . $this->receiver->id);
     }
+    
 
     public function broadcastAs()
     {

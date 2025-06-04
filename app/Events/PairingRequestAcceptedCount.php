@@ -29,7 +29,7 @@ class PairingRequestAcceptedCount implements ShouldBroadcastNow
     public function broadcastOn()
     {
         return [
-            new Channel('room.' . $this->roomId),
+            new PrivateChannel('room.' . $this->roomId),
         ];
     }
 

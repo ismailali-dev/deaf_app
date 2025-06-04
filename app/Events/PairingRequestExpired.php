@@ -28,8 +28,8 @@ class PairingRequestExpired implements ShouldBroadcastNow
     public function broadcastOn()
     {
         return [
-            new Channel('pairing.' . $this->senderId),
-            new Channel('pairing.' . $this->receiverId),
+            new PrivateChannel('pairing.' . $this->senderId),
+            new PrivateChannel('pairing.' . $this->receiverId),
         ];
     }
 

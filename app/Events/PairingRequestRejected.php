@@ -27,7 +27,7 @@ class PairingRequestRejected implements ShouldBroadcastNow
 
     public function broadcastOn()
     {
-        return new Channel('pairing.' . $this->sender->id);
+        return new PrivateChannel('pairing.' . $this->sender->id);
     }
 
     public function broadcastAs()

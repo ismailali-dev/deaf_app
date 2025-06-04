@@ -366,7 +366,7 @@ public function getActivatelistenerUersCount()
                 })
                 ->get();
 
-            // ❗ Filter out any user who is already connected
+            // Filter out any user who is already connected
                 $pairedUsers = $pairings->filter(function ($pair) use ($user, $connectedUserIds) {
                 $otherUserId = $pair->from_id == $user->id ? $pair->to_id : $pair->from_id;
                 return !in_array($otherUserId, $connectedUserIds); // Exclude connected users
@@ -727,229 +727,284 @@ public function getActivatelistenerUersCount()
         //         'size_in_kb'    => round($file->getSize() / 1024, 2), // e.g., 420.55 KB
         //     ]);
         // }
-        
-// public function sendGroupMessage(Request $request)
-// {
-//     try {
-        
-//         $validated = $request->validate([
-//             'room_id' => 'required|string',
-//             'method'  => 'required|in:text,audio',
-//             'message' => 'nullable|string|required_if:method,text',
-//             'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
-//             'myself'  => 'nullable|string', // Expects 'true' as string
-//         ]);
-    
-//         $sender = auth()->user();
-
-//         if (!$sender) {
-//             return errorResponse("Sender not found");
-//         }
-
-//         $room_id = $validated['room_id'];
-//         $method  = $validated['method'];
-//         $message = $validated['message'] ?? null;
-//         $myself  = ($validated['myself'] ?? '') === 'true';
-//         $roomUsers = null;
-//         // Determine room users
-//         if ($myself) {
-            
-//             if ($sender->current_room_id != $room_id) {
-//                 return errorResponse("You are not in this room.");
-//             }
-//             $roomUsers = collect([$sender]);
-//         } else {
-           
-//             $roomUsers = User::where('current_room_id', $room_id)
-//                 ->where('id', '!=', $sender->id)
-//                 ->get();
-           
-//         }
-
-//         if (!$roomUsers) {
-//             return errorResponse("No users found in this room.");
-//         }
-
-//         // === AUDIO Method ===
-//         if ($method === 'audio') {
-            
-//             if (!$request->hasFile('audio')) {
-//                 return errorResponse("Audio file is required for audio method.");
-//             }
-            
-//             foreach ($roomUsers as $receiver) {
-                
-               
-//                 $voicePath = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
-                
-//                 if($voicePath){
-//                      broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();  
-//                 }
-//                 else{
-//                     return errorResponse("No Match Found! Try Again");
-//                 }
-                 
-                
-                
-//             }
-
-//             return successResponse("Audio message sent successfully.");
-//         }
-
-//         // === TEXT Method ===
-//         if ($method === 'text') {
-//             if (empty($message)) {
-//                 return errorResponse("Text message is required for text method.");
-//             }
-            
-//             if($myself){
-                
-//                 // Text message broadcast (for display)
-//                 broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
-            
-//                 // // Voice generation for self
-//                 $voiceId = $sender->gender === 'female'
-//                     ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
-//                     : env('AWS_MALE_VOICE_ID', 'Matthew');
-                    
-//                 $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
-//                 broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath,$method))->toOthers();
-            
-             
-//             }
-
-//             // Text-to-speech conversion only if 2 users in room and sender is role_id 3
-//             if ($roomUsers->count() === 1 && $sender->role_id == 3) {
-//                 $receiver = $roomUsers->first();
-
-//                 if ($receiver->role_id != 3) {
-                   
-//                     $voiceId = $receiver->gender === 'female'
-//                         ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
-//                         : env('AWS_MALE_VOICE_ID', 'Matthew');
-
-
-//                         if ($request->hasFile('audio')) {
-//                             foreach ($roomUsers as $receiver) {
-//                               $voicePath =  $this->handleAudioMessage($request->file('audio'), $validated['room_id'], $sender, $receiver);
-//                               broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();
-//                             }
-                            
-                            
-//                             return successResponse("Audio message sent to all room users.");
-//                         }
-        
-                    
-//                     $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender);
-
-//                     broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath,$method))->toOthers();
-//                 }
-//             }
-            
-//             if($roomUsers->count() >= 1 ){
-//                 broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
-//             }
-            
-
-//             return successResponse("Text message broadcasted successfully.", [
-//                 'sender_id' => $sender->id,
-//                 'room_id' => $room_id,
-//                 'message' => $message
-//             ]);
-//         }
-
-//         return errorResponse("Invalid method.");
-//     } catch (\Exception $e) {
-//         return errorResponse("Unable to broadcast message: " . $e->getMessage(), 400);
-//     }
-// }
-
-
-
+      
+      
+    //old code   
 public function sendGroupMessage(Request $request)
 {
     try {
+        
         $validated = $request->validate([
             'room_id' => 'required|string',
             'method'  => 'required|in:text,audio',
             'message' => 'nullable|string|required_if:method,text',
-            'audio'   => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
-            'myself'  => 'nullable|string',
+            'audio' => 'nullable|file|mimetypes:audio/mpeg,audio/x-m4a,video/mp4,audio/mp4,audio/wav,audio/x-wav,audio/ogg|required_if:method,audio',
+            'isFromAutoSend'  => 'nullable|string', // Expects 'true' as string,
+            'voiceFile' => 'nullable|required_if:method,isFromAutoSend',
+            
         ]);
-
-        $sender = auth()->user();
-        if (!$sender) {
-            return errorResponse("Sender not found");
-        }
-
+    
         $room_id = $validated['room_id'];
         $method  = $validated['method'];
         $message = $validated['message'] ?? null;
-        $myself  = ($validated['myself'] ?? '') === 'true';
+        $isFromAutoSend  = ($validated['isFromAutoSend'] ?? '') === 'true';
+        $voiceFile = @$validated['voiceFile'];
+        
+        $roomUsers = null;
+        $sender = auth()->user();
+        
+        
+        if (!$sender) {
+            return errorResponse("Sender not found");
+        }
+        if ($sender->current_room_id != $room_id) {
+                return errorResponse("You are not in this room.");
+        }
+        
 
-        // Fetch all users in room INCLUDING sender
-        $roomUsers = User::where('current_room_id', $room_id)->get();
-
-        if ($roomUsers->isEmpty()) {
+        $roomUsers = User::where('current_room_id', $room_id)
+                ->get();
+       
+        if (!$roomUsers) {
             return errorResponse("No users found in this room.");
         }
-
-        // Get mute settings for all users in one query
-        $muteMap = ListenerSetting::whereIn('user_id', $roomUsers->pluck('id'))
-            ->pluck('mute', 'user_id')
-            ->map(fn($mute) => (bool)$mute);
-
-        if ($method === 'audio') {
-            if (!$request->hasFile('audio')) {
-                return errorResponse("Audio file is required.");
-            }
-
-            foreach ($roomUsers as $receiver) {
-                if ($muteMap[$receiver->id] ?? true) {
-                    // User muted or no setting found (assume muted)
-                    continue;
+        
+        
+        
+        if($roomUsers->count() == 1){   //single user case
+                
+                $myselfSettings = ListenerSetting::where('user_id', $sender->id)->first();
+                
+                if ($method === 'audio') {  
+                    
+                        if($myselfSettings && !$myselfSettings->mute){
+                  
+                            $audioMatchData = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $sender);
+                            if($audioMatchData){
+                                
+                                    if($myselfSettings->autosend){
+                                       
+                                        broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $audioMatchData['voice_file'],$method))->toOthers();
+                                        broadcast(new GroupMessageSent($sender, $audioMatchData['final_match'], $room_id,$method))->toOthers();
+                                        return successResponse("Audio and Text message sent successfully.");
+                                    }
+                                    else{
+                                        
+                                        $apidata = [
+                                            'final_match'=>$audioMatchData['final_match'],
+                                            'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                            ];
+                                         return successResponse("Audio and Text message recieved.",$apidata);
+                                    }
+                                    
+                                   
+                            }
+                            else{
+                                return errorResponse("No Match Found! Try Again");
+                            }
+                            
+                        }
+                        else{
+                                $audioMatchData = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $sender);
+                                if($audioMatchData){
+                                    
+                                     if($myselfSettings->autosend){
+                                         broadcast(new GroupMessageSent($sender, $audioMatchData['final_match'], $room_id,$method))->toOthers();
+                                         return successResponse("Text message sent successfully.");
+                                     }
+                                    else{
+                                            $apidata = [
+                                            'final_match'=>$audioMatchData['final_match'],
+                                             'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                            ];
+                                            
+                                         return successResponse("Audio and Text message recieved.",$apidata);
+                                    }
+                                    
+                                }
+                                else{
+                                    return errorResponse("No Match Found! Try Again");
+                                }
+                        }
+             
+                 
                 }
-
-                $voicePath = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
-                if ($voicePath) {
-                    broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath, $method))->toOthers();
+                else{
+                    
+                    if($myselfSettings && !$myselfSettings->mute){
+                        
+                        $voicePath = '';
+                        
+                        if($isFromAutoSend && $isFromAutoSend == 'true'){
+                            $voiceId = $sender->gender === 'female'
+                            ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
+                            : env('AWS_MALE_VOICE_ID', 'Matthew');
+                            
+                            $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
+                            $method = 'audio';
+                        }
+                        else{
+                            $voicePath = $voiceFile;
+                        }
+                        
+                        if($voicePath){
+                            broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $sender, $voicePath,$method))->toOthers();
+                        }
+                        else{
+                            return errorResponse("No Voice Path Found");
+                        }
+                        
+                        broadcast(new GroupMessageSent($sender, $message, $room_id,$method))->toOthers();
+                        return successResponse("Audio and Text message sent successfully.");
+                    }
+                    else{
+                        broadcast(new GroupMessageSent($sender, $message, $room_id,$method))->toOthers();
+                        return successResponse("Text message sent successfully.");
+                    }
+                     
                 }
-            }
-
-            return successResponse("Audio message sent successfully.");
+            
+            
         }
-
-        if ($method === 'text') {
-            if (empty($message)) {
-                return errorResponse("Text message is required for text method.");
-            }
-
-            // Broadcast text message to others (excluding sender)
-            broadcast(new GroupMessageSent($sender, $message, $room_id))->toOthers();
-
-            // For voice conversion - send to all unmuted users INCLUDING sender
-            foreach ($roomUsers as $receiver) {
-                if ($muteMap[$receiver->id] ?? true) {
-                    continue;
+        else if($roomUsers->count() == 2){ //double user case
+        
+            
+            $senderListenerSettings = ListenerSetting::where('user_id', $sender->id)->first();
+            // Filter to get the receiver
+            $receiver = $roomUsers->firstWhere('id', '!=', $sender->id);
+          
+           
+            if($sender->role_id == 3){ // if sender is deaf then broadcast voice message or message to listener
+            
+              
+             
+                if ($method === 'audio') {
+                    
+                    
+                    
+                        $receiverListenerSettings = ListenerSetting::where('user_id', $receiver->id)->first();
+                        
+                         $audioMatchData = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
+                        
+                        if($receiverListenerSettings && !$receiverListenerSettings->mute){
+                  
+                           
+                            if($audioMatchData){
+                                
+                                    if($senderListenerSettings->autosend){
+                                        
+                                        
+                                        broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $audioMatchData['voice_file'],$method))->toOthers();
+                                        return successResponse("Audio message sent successfully.");
+                                    }
+                                    else{
+                                        
+                                        
+                                            $apidata = [
+                                            'final_match'=>$audioMatchData['final_match'],
+                                             'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                            ];
+                                            
+                                         return successResponse("Audio and Text message recieved.",$apidata);
+                                    }
+                                    
+                                    
+                            }
+                            else{
+                                return errorResponse("No Match Found! Try Again");
+                            }
+                            
+                        }
+                        else{
+                                
+                                if($audioMatchData){
+                                    
+                                    if($senderListenerSettings->autosend){
+                                    
+                                        broadcast(new GroupMessageSent($sender, $audioMatchData['final_match'], $room_id,$method))->toOthers();
+                                        return successResponse("Text message sent successfully.");
+                                    }
+                                    else{
+                                        
+                                        
+                                            $apidata = [
+                                            'final_match'=>$audioMatchData['final_match'],
+                                             'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                            ];
+                                            
+                                         return successResponse("Audio and Text message recieved.",$apidata);
+                                    }
+                                    
+                                   
+                                }
+                                else{
+                                    return errorResponse("No Match Found! Try Again");
+                                }
+                        }
                 }
-
-                // For Polly voice generation, you may want to customize who triggers this.
-                $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender, $receiver);
-                broadcast(new \App\Events\RoomVoiceMessage($room_id, $sender, $receiver, $voicePath, $method))->toOthers();
+                else{
+                    
+                    $receiverListenerSettings = ListenerSetting::where('user_id', $receiver->id)->first();
+                    
+                    if($receiverListenerSettings && !$receiverListenerSettings->mute){
+                       
+                       
+                        $voicePath = '';
+                       
+                        if($isFromAutoSend && $isFromAutoSend == 'true'){
+                                $voiceId = $sender->gender === 'female'
+                                ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
+                                : env('AWS_MALE_VOICE_ID', 'Matthew');
+                                
+                                $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$receiver);
+                                $method = 'audio';
+                           }
+                         else{
+                            $voicePath = $voiceFile;
+                        }
+                        
+                        if($voicePath){
+                                    broadcast(new \App\Events\RoomVoiceMessage($validated['room_id'], $sender, $receiver, $voicePath,$method))->toOthers();
+                                    return successResponse("Audio message sent successfully.");
+                        }
+                        else{
+                            return errorResponse("No Voice Path Found");
+                        }
+                            
+                        
+                    }
+                    else{
+                        broadcast(new GroupMessageSent($sender, $message, $room_id,$method,$receiver))->toOthers();
+                        return successResponse("Text message sent successfully.");
+                    }
+                    
+                }
             }
-
-            return successResponse("Text message broadcasted successfully.", [
-                'sender_id' => $sender->id,
-                'room_id' => $room_id,
-                'message' => $message
-            ]);
+            else{
+                
+                 broadcast(new GroupMessageSent($sender, $message, $room_id,$method))->toOthers();
+                 return successResponse("Text message sent successfully.");
+                
+            }
+        
+            
         }
-
-        return errorResponse("Invalid method.");
+        else{ //multiple users case
+            
+            //normal chat 
+            broadcast(new GroupMessageSent($sender, $message, $room_id,$method))->toOthers();
+            return successResponse("Text message sent successfully.");
+            
+        }
+        
+       return successResponse("Api bypassed successfully.");
+      
+        
     } catch (\Exception $e) {
         return errorResponse("Unable to broadcast message: " . $e->getMessage(), 400);
     }
 }
+
 
 
 
@@ -1025,7 +1080,7 @@ public function sendGroupMessage(Request $request)
     // }
     
     
-   public function sendVoiceMessage(Request $request)
+public function sendVoiceMessage(Request $request)
 {
     $validated = $request->validate([
         'room_id' => 'required|string',
@@ -1084,77 +1139,88 @@ public function sendGroupMessage(Request $request)
 protected function handleAudioMessage($audioFile, $roomId, $sender, $receiver)
 {
     try {
-        // Store audio file
-        // $path = $audioFile->store('temp_audio', 'public');
-        // $fullPath = public_path('storage/' . $path);
         
         $path = $audioFile->store('temp_audio', 'public');
-        // dd($path);
         $fullPath = base_path('public/storage/' . $path);
-
-        // dd($fullPath);
-        // Extract audio features
         $features = $this->extractAudioFeatures($fullPath);
-
         if (!$features || !isset($features['status']) || $features['status'] !== 'success') {
-            // return errorResponse($features['message'] ?? 'Failed to extract features from audio', 404);
             return false;
         }
 
         // Find closest matching sentence
         $match = $this->findClosestAudioMatch($features['features']);
         
-       
         if (!$match) {
-            // return errorResponse('No matching sentence found', 404);
             return false;
         }
-        
-        $sentence = "";
-        
+
       
-        
+        $finalmatch = "";
         if($match->audioable_type == 'App\Models\Word')
         {
                 $word = Word::find($match->audioable_id);
                 if (!$word) {
-                return false;
+                    return false;
                 }
                 $relativePath = $this->generatePollyVoiceOnce($roomId, $word->word, $sender, $receiver);
-                return $relativePath;
+                
+                $finalmatch = $word->word;
+                
         }
         else{
             
             $sentence = Sentence::find($match->audioable_id);
-            
-            
-            
-              if (!$sentence) {
-                return errorResponse('Matched sentence not found', 404);
+            if (!$sentence) {
                 return false;
             }
-        
             // Generate and return Polly voice response
             $relativePath = $this->generatePollyVoiceOnce($roomId, $sentence->sentence, $sender, $receiver);
-           
-            return $relativePath;
+            $finalmatch = $sentence->sentence;
         }
-       
+     
+       $data = [
+            'final_match' => $finalmatch,
+            'voice_file' => $relativePath
+        ];
         
-
-        // return successResponse([
-        //     'status' => 'success',
-        //     'matched_sentence' => $sentence->sentence,
-        //     'voice_file' => $relativePath
-        // ]);
+        return $data;
+        
         
     } catch (\Throwable $e) {
         return false;
-        return errorResponse('Server error: ' . $e->getMessage(), 500);
     }
 }
 
+protected function extractTextFromAudio($audioFile)
+{
+    try {
+        $path = $audioFile->store('temp_audio', 'public');
+        $fullPath = base_path('public/storage/' . $path);
 
+        $features = $this->extractAudioFeatures($fullPath);
+
+        if (!$features || !isset($features['status']) || $features['status'] !== 'success') {
+            return null;
+        }
+
+        $match = $this->findClosestAudioMatch($features['features']);
+
+        if (!$match) {
+            return null;
+        }
+
+        if ($match->audioable_type === 'App\Models\Word') {
+            $word = Word::find($match->audioable_id);
+            return $word?->word ?? null;
+        }
+
+        $sentence = Sentence::find($match->audioable_id);
+        return $sentence?->sentence ?? null;
+
+    } catch (\Throwable $e) {
+        return null;
+    }
+}
 
 protected function extractAudioFeatures($filePath)
 {

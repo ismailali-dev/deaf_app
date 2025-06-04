@@ -186,13 +186,18 @@ Route::group(['prefix'=>'listener','middleware' => 'auth:api','namespace' => 'Li
 
 
 
-Route::post('/broadcasting/auth', function (Request $request) {
-    if (!auth()->check()) {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
 
+
+// Route::post('/broadcasting/auth', function (Request $request) {
+//     if (!auth()->check()) {
+//         return response()->json(['message' => 'Unauthorized'], 403);
+//     }
+
+//     return Broadcast::auth($request);
+// })->middleware('auth:api');
+
+
+Route::post('/broadcasting/auth', function (\Illuminate\Http\Request $request) {
     return Broadcast::auth($request);
 })->middleware('auth:api');
-
-
 
