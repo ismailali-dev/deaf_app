@@ -637,6 +637,8 @@ public function getActivatelistenerUersCount()
             $connectedCounts = Connection::where('room_id', $roomId)
                 ->where('status', 'connected')
                 ->count();
+            
+            $otherUser->update(['current_room_id' => null]);
     
             // Broadcast the disconnection event
             broadcast(new Disconnected($authUser, $otherUser, $roomId, $connectedCounts));
@@ -773,7 +775,17 @@ public function sendGroupMessage(Request $request)
         
         if($roomUsers->count() == 1){   //single user case
                 
-                $myselfSettings = ListenerSetting::where('user_id', $sender->id)->first();
+                
+                $myselfSettings = ListenerSetting::firstOrCreate(
+                    ['user_id' => $sender->id], // Search criteria
+                    [ 
+                        
+                        'autosend'     =>  false,
+                        'notification' =>  false,
+                        'mute'         =>  false,
+                        
+                    ]
+                );
                 
                 if ($method === 'audio') {  
                     
@@ -792,7 +804,7 @@ public function sendGroupMessage(Request $request)
                                         
                                         $apidata = [
                                             'final_match'=>$audioMatchData['final_match'],
-                                            'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                            'voice_file' => $audioMatchData['voice_file'],
                                             ];
                                          return successResponse("Audio and Text message recieved.",$apidata);
                                     }
@@ -815,7 +827,7 @@ public function sendGroupMessage(Request $request)
                                     else{
                                             $apidata = [
                                             'final_match'=>$audioMatchData['final_match'],
-                                             'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                             'voice_file' => $audioMatchData['voice_file'],
                                             ];
                                             
                                          return successResponse("Audio and Text message recieved.",$apidata);
@@ -836,15 +848,19 @@ public function sendGroupMessage(Request $request)
                         $voicePath = '';
                         
                         if($isFromAutoSend && $isFromAutoSend == 'true'){
+                            
+                            
                             $voiceId = $sender->gender === 'female'
                             ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
                             : env('AWS_MALE_VOICE_ID', 'Matthew');
                             
-                            $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
+                            $voicePath = $voiceFile;
                             $method = 'audio';
                         }
                         else{
-                            $voicePath = $voiceFile;
+                            
+                            $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$sender);
+                            
                         }
                         
                         if($voicePath){
@@ -869,7 +885,20 @@ public function sendGroupMessage(Request $request)
         else if($roomUsers->count() == 2){ //double user case
         
             
-            $senderListenerSettings = ListenerSetting::where('user_id', $sender->id)->first();
+            // $senderListenerSettings = ListenerSetting::where('user_id', $sender->id)->first();
+            
+             $senderListenerSettings = ListenerSetting::firstOrCreate(
+                    ['user_id' => $sender->id], // Search criteria
+                    [ 
+                        
+                        'autosend'     =>  false,
+                        'notification' =>  false,
+                        'mute'         =>  false,
+                        
+                    ]
+                );
+                
+            
             // Filter to get the receiver
             $receiver = $roomUsers->firstWhere('id', '!=', $sender->id);
           
@@ -880,9 +909,17 @@ public function sendGroupMessage(Request $request)
              
                 if ($method === 'audio') {
                     
-                    
-                    
-                        $receiverListenerSettings = ListenerSetting::where('user_id', $receiver->id)->first();
+                
+                        $receiverListenerSettings = ListenerSetting::firstOrCreate(
+                                ['user_id' => $receiver->id], // Search criteria
+                                [ 
+                                    
+                                    'autosend'     =>  false,
+                                    'notification' =>  false,
+                                    'mute'         =>  false,
+                                    
+                                ]
+                            );
                         
                          $audioMatchData = $this->handleAudioMessage($request->file('audio'), $room_id, $sender, $receiver);
                         
@@ -902,7 +939,7 @@ public function sendGroupMessage(Request $request)
                                         
                                             $apidata = [
                                             'final_match'=>$audioMatchData['final_match'],
-                                             'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                             'voice_file' => $audioMatchData['voice_file'],
                                             ];
                                             
                                          return successResponse("Audio and Text message recieved.",$apidata);
@@ -929,7 +966,7 @@ public function sendGroupMessage(Request $request)
                                         
                                             $apidata = [
                                             'final_match'=>$audioMatchData['final_match'],
-                                             'voice_file' => asset('public/storage/' . $audioMatchData['voice_file']),
+                                             'voice_file' =>$audioMatchData['voice_file'],
                                             ];
                                             
                                          return successResponse("Audio and Text message recieved.",$apidata);
@@ -944,7 +981,19 @@ public function sendGroupMessage(Request $request)
                 }
                 else{
                     
-                    $receiverListenerSettings = ListenerSetting::where('user_id', $receiver->id)->first();
+                    
+                    $receiverListenerSettings = ListenerSetting::firstOrCreate(
+                                ['user_id' => $receiver->id], // Search criteria
+                                [ 
+                                    
+                                    'autosend'     =>  false,
+                                    'notification' =>  false,
+                                    'mute'         =>  false,
+                                    
+                                ]
+                            );
+                            
+                    
                     
                     if($receiverListenerSettings && !$receiverListenerSettings->mute){
                        
@@ -955,12 +1004,12 @@ public function sendGroupMessage(Request $request)
                                 $voiceId = $sender->gender === 'female'
                                 ? env('AWS_FEMALE_VOICE_ID', 'Joanna')
                                 : env('AWS_MALE_VOICE_ID', 'Matthew');
+                                $voicePath = $voiceFile;
                                 
-                                $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$receiver);
                                 $method = 'audio';
                            }
                          else{
-                            $voicePath = $voiceFile;
+                            $voicePath = $this->generatePollyVoiceOnce($room_id, $message, $sender,$receiver);
                         }
                         
                         if($voicePath){

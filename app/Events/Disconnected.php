@@ -8,6 +8,7 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Broadcasting\PrivateChannel;
 
 class Disconnected implements ShouldBroadcastNow
 {
@@ -29,8 +30,8 @@ class Disconnected implements ShouldBroadcastNow
     public function broadcastOn()
     {
         return [
-            new Channel('room.' . $this->roomId),
-            new Channel('pairing.' . $this->receiver->id),
+            new PrivateChannel('room.' . $this->roomId),
+            new PrivateChannel('pairing.' . $this->receiver->id),
             // new Channel('pairing.' . $this->receiver->id),
         ];
     }
