@@ -37,6 +37,8 @@ Route::group(['prefix'=>'auth'], function () {
     
     Route::post('reset-password', 'AuthController@resetPassword');
     
+    Route::post('/webhook/revenuecat', 'AuthController@handleSubscription');
+    
     
 });
 
@@ -51,18 +53,27 @@ Route::group(['prefix'=>'common'], function () {
             Route::get('get-profile', 'UserCommonController@getProfile');
             Route::post('update-profile', 'UserCommonController@updateProfile');
             Route::post('change-password', 'UserCommonController@changePassword');
+            Route::post('delete-my-account', 'UserCommonController@deleteMyAccount');
             
             //users apis 
             Route::group(['prefix'=>'users'], function () {
                 Route::get('list', 'BroadCastController@getUsersList');
                 Route::get('my-friend-requests', 'BroadCastController@getFriendRequestsList');
                 Route::post('friend-request', 'BroadCastController@friendRequest');
+                Route::post('block-unblock-user', 'BroadCastController@blockUnblockRequest');
+                Route::post('report-user', 'BroadCastController@reportUser');
+                Route::post('send-test-notification', 'BroadCastController@sendTestNotification');
+                
                 Route::post('accept-or-deny-friend-request', 'BroadCastController@handleFriendRequest');
                 Route::get('get-my-friends', 'BroadCastController@getMyFriends');
+                
+                Route::get('get-my-block-users', 'BroadCastController@getMyBlockedUsers');
+                
                 Route::post('unfriend', 'BroadCastController@unFriend');
                 
-                Route::post('send-message', 'BroadCastController@sendMessage');
+                Route::post('send-message', 'BroadCastController@sendMessage')->middleware('check.storage.limit');
                 Route::get('messages/{user}', 'BroadCastController@fetchMessages');
+                Route::post('send-parent-approval-request', 'BroadCastController@sendParentApprovalRequest');
                 
             });
             
@@ -121,11 +132,15 @@ Route::group(['prefix'=>'common'], function () {
 Route::group(['prefix'=>'deaf','middleware' => 'auth:api','namespace' => 'Deaf'], function () {
     
     
+            Route::group(['prefix' => 'subscriptions', 'middleware' => 'auth:api'], function () {
+                Route::get('/plan-usage', 'SubscriptionController@getPlanUsage');
+            });
+
             Route::group(['prefix' => 'sentences'], function () {
                 Route::get('list', 'SentenceController@getMySentenceList');
                 Route::get('{id}', 'SentenceController@getSentenceById');
-                Route::post('create', 'SentenceController@createSentence');
-                Route::post('update/{id}', 'SentenceController@updateSentence'); // Update route
+                Route::post('create', 'SentenceController@createSentence')->middleware('check.storage.limit');
+                Route::post('update/{id}', 'SentenceController@updateSentence')->middleware('check.storage.limit'); // Update route
                 Route::delete('delete/{id}', 'SentenceController@deleteSentence');
                 
             });
@@ -133,9 +148,9 @@ Route::group(['prefix'=>'deaf','middleware' => 'auth:api','namespace' => 'Deaf']
             Route::group(['prefix' => 'words'], function () {
                 Route::get('list', 'WordController@getMyWordList');
                 Route::get('{id}', 'WordController@getWordById');
-                Route::post('create', 'WordController@createWord');
+                Route::post('create', 'WordController@createWord')->middleware('check.storage.limit');
                 Route::post('identify-audio',  'WordController@identifyAudio');
-                Route::post('update/{id}', 'WordController@updateWord'); // Update route
+                Route::post('update/{id}', 'WordController@updateWord')->middleware('check.storage.limit'); // Update route
                 Route::delete('delete/{id}', 'WordController@deleteWord');
                 
             });

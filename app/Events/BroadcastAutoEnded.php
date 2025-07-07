@@ -7,16 +7,17 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use App\Http\Resources\BroadcastResource;
 
-class BroadcastAutoEnded implements ShouldBroadcast
+class BroadcastAutoEnded implements ShouldBroadcastNow
 {
     use Dispatchable,InteractsWithSockets, SerializesModels;
 
     public $broadcast;
-    
+
 
     /**
      * Create a new event instance.

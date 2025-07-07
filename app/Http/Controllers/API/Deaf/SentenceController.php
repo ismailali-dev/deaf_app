@@ -82,6 +82,7 @@ class SentenceController extends BaseController
     
             // Upload audio files using the method in the base controller
             $uploadedPaths = $this->uploadFiles($audioFiles, 'audio', 'public');
+            $this->updateUserStorageUsage($uploadedPaths);
     
             // Create the sentence in the database
             $sentence = Sentence::create([
@@ -202,6 +203,8 @@ class SentenceController extends BaseController
                 );
             }
         }
+        
+        $this->updateUserStorageUsage(array_values($uploadedPaths));
 
         return successResponse('Sentence updated successfully.', 200);
 
@@ -245,10 +248,9 @@ class SentenceController extends BaseController
         }
     }
     
-   public function deleteSentence($id)
+    public function deleteSentence($id)
     {
         try {
-            // Find the sentence that belongs to the authenticated user
             $sentence = Sentence::where('id', $id)
                                 ->where('user_id', $this->userID)
                                 ->first();
@@ -257,14 +259,23 @@ class SentenceController extends BaseController
                 return errorResponse('Sentence not found or does not belong to the user', 404);
             }
     
-            // Delete associated audio files (assuming there's an audioFiles relationship)
+            $filePaths = [];
+    
+            // Delete associated audio files and collect file paths
             foreach ($sentence->audioFiles as $audioFile) {
+                $filePaths[] = $audioFile->file_path;
+    
                 if (Storage::exists($audioFile->file_path)) {
                     Storage::delete($audioFile->file_path);
                 }
+    
+                $audioFile->delete(); // Optional: clean up audio DB entries
             }
     
-            // Attempt to delete the sentence
+            // Reduce used storage for the user
+            $this->reduceUserStorageUsage($filePaths);
+    
+            // Delete the sentence itself
             $sentence->delete();
     
             return successResponse('Sentence and associated audio files deleted successfully.', 200);

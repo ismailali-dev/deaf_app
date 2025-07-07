@@ -6,10 +6,11 @@ use App\Models\Broadcast;
 use App\Http\Resources\BroadcastResource;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Queue\SerializesModels;
 
-class BroadcastStarted implements ShouldBroadcast
+class BroadcastStarted implements ShouldBroadcastNow
 {
     use InteractsWithSockets, SerializesModels;
 

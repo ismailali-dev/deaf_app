@@ -79,7 +79,8 @@ class WordController extends BaseController
     
             // Upload audio files using the method in the base controller
             $uploadedPaths = $this->uploadFiles($audioFiles, 'audio', 'public');
-    
+            $this->updateUserStorageUsage($uploadedPaths);
+            
             //Create the sentence in the database
             $word = Word::create([
                 'user_id' => $this->userID,
@@ -300,6 +301,8 @@ class WordController extends BaseController
                     );
                 }
             }
+            
+            $this->updateUserStorageUsage(array_values($uploadedPaths));
     
             return successResponse('Word updated successfully.', 200);
     
@@ -346,7 +349,6 @@ class WordController extends BaseController
     public function deleteWord($id)
     {
         try {
-            // Find the word that belongs to the authenticated user
             $word = Word::where('id', $id)
                         ->where('user_id', $this->userID)
                         ->first();
@@ -355,18 +357,27 @@ class WordController extends BaseController
                 return errorResponse('Word not found or does not belong to the user', 404);
             }
     
-            // Delete associated audio files (assuming there's an audioFiles relationship)
+            $filePaths = [];
+    
             foreach ($word->audioFiles as $audioFile) {
+                $filePaths[] = $audioFile->file_path;
+    
+                // Delete the file from storage
                 if (Storage::exists($audioFile->file_path)) {
                     Storage::delete($audioFile->file_path);
                 }
+    
+                // Optionally delete the DB record
+                $audioFile->delete();
             }
     
-            // Attempt to delete the word
+            // Reduce the used storage in user record
+            $this->reduceUserStorageUsage($filePaths);
+    
+            // Delete the word
             $word->delete();
     
             return successResponse('Word and associated audio files deleted successfully.', 200);
-    
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
         }

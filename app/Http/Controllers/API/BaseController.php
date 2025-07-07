@@ -151,10 +151,16 @@ class BaseController extends Controller
         }
         
         
+        if($request->has('perPage')){
+            // Pagination
+            $perPage = $request->has('perPage') ? $request->perPage : 50;
+            $query = $query->paginate($perPage);
+        }
+        else{
+            $query = $query->get();
+        }
 
-        // Pagination
-        $perPage = $request->has('perPage') ? $request->perPage : 50;
-        $query = $query->paginate($perPage);
+        
     } else {
         // If $query is neither a Collection nor a Query Builder, return an empty collection
         return collect();
@@ -262,6 +268,65 @@ class BaseController extends Controller
     
         return $paths;
     }
+    
+    protected function updateUserStorageUsage(array $paths, $disk = 'public')
+    {
+        $totalBytesUsed = 0;
+    
+        foreach ($paths as $path) {
+            $filePath = storage_path("app/{$disk}/{$path}");
+            if (file_exists($filePath)) {
+                $totalBytesUsed += filesize($filePath);
+            }
+        }
+    
+        if ($totalBytesUsed > 0 && $this->user) {
+            $this->user->increment('storage_used_in_bytes', $totalBytesUsed);
+        }
+    
+        return $totalBytesUsed;
+    }
+    
+    protected function addToUserStorageUsage(array $paths, $disk = 'public')
+    {
+        $totalBytes = 0;
+    
+        foreach ($paths as $path) {
+            $fullPath = Storage::disk($disk)->path($path);
+            if (file_exists($fullPath)) {
+                $totalBytes += filesize($fullPath);
+            }
+        }
+    
+        if ($totalBytes > 0 && $this->user) {
+            $this->user->increment('storage_used_in_bytes', $totalBytes);
+        }
+    
+        return $totalBytes;
+    }
+
+    
+    protected function reduceUserStorageUsage(array $paths, $disk = 'public')
+    {
+        $totalBytesFreed = 0;
+    
+        foreach ($paths as $path) {
+            $fullPath = Storage::disk($disk)->path($path);
+            if (file_exists($fullPath)) {
+                $totalBytesFreed += filesize($fullPath);
+            }
+        }
+    
+        if ($totalBytesFreed > 0 && $this->user) {
+            $newValue = max(0, $this->user->storage_used_in_bytes - $totalBytesFreed);
+            $this->user->update(['storage_used_in_bytes' => $newValue]);
+        }
+    
+        return $totalBytesFreed;
+    }
+    
+    
+
     
     
 

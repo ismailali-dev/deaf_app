@@ -56,6 +56,7 @@ class BroadcastResource extends JsonResource
         
         return [
             'id' => $this->id,
+            'role_id'=>$this->role_id,
             'user_id' => $this->user_id,
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,

@@ -8,6 +8,6 @@
 <body>
     <h1>Your OTP Code</h1>
     <p>Your OTP code is: <strong>{{ $otp }}</strong></p>
-    <p>Use this code to reset your password.</p>
+    
 </body>
 </html>

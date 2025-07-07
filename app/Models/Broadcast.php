@@ -26,14 +26,24 @@ class Broadcast extends Model
     ];
     
     
+    protected $appends = ['role_id'];
+
+public function getRoleIdAttribute()
+{
+    return $this->user->role_id ?? null;
+}
+
+public function user()
+{
+    return $this->belongsTo(User::class);
+}
+    
     //protected $appends = ['user_avatar', 'user_name', 'name', 'user_email','user_age'];
     
 
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
     
+    
+   
     
     public function getDurationAttribute($value)
     {

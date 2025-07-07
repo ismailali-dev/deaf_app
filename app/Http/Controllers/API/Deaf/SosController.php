@@ -28,62 +28,61 @@ class SosController extends BaseController
      public function create(Request $request)
     {
         try {
-            // Validate the incoming data
             $validator = Validator::make($request->all(), [
                 'emergency_type' => 'required|string',
                 'sos_type' => 'required|in:E1,E2,E3,E4',
                 'file_type' => 'required|in:audio,video',
-                'file_path' => 'nullable|file|mimes:mp3,wav|max:10240',  // Validate the audio file if provided
-                'audio_file_path' => 'nullable|file|mimes:mp3,wav|max:51200',  // Validate the audio file if provided
-                'video_file_path' => 'nullable|file|mimes:mp4,mov,avi|max:102400',  // Validate the video file if provided
+                'file_path' => 'nullable|file|mimes:mp3,wav|max:10240',
+                'audio_file_path' => 'nullable|file|mimes:mp3,wav|max:51200',
+                'video_file_path' => 'nullable|file|mimes:mp4,mov,avi|max:102400',
             ]);
     
             if ($validator->fails()) {
                 return errorResponse($validator->errors()->first(), 422);
             }
     
-            // Initialize file paths
             $audioFilePath = null;
             $videoFilePath = null;
             $generalFilePath = null;
+            $pathsToTrack = []; // Track all uploaded file paths
     
-            // Handle file upload for general file path
             if ($request->hasFile('file_path')) {
-                // Upload the general file
                 $generalFile = $request->file('file_path');
-                $generalFilePath = $generalFile->store('sos-recordings/general_files', 'public'); // Store in 'general_files' directory
+                $generalFilePath = $generalFile->store('sos-recordings/general_files', 'public');
+                $pathsToTrack[] = $generalFilePath;
             }
     
-            // Handle file upload for audio file
             if ($request->hasFile('audio_file_path')) {
-                // Upload the audio file
                 $audioFile = $request->file('audio_file_path');
-                $audioFilePath = $audioFile->store('sos-recordings/audio', 'public'); // Store in 'audio' directory
+                $audioFilePath = $audioFile->store('sos-recordings/audio', 'public');
+                $pathsToTrack[] = $audioFilePath;
             }
     
-            // Handle file upload for video file
             if ($request->hasFile('video_file_path')) {
-                // Upload the video file
                 $videoFile = $request->file('video_file_path');
-                $videoFilePath = $videoFile->store('sos-recordings/videos', 'public'); // Store in 'videos' directory
+                $videoFilePath = $videoFile->store('sos-recordings/videos', 'public');
+                $pathsToTrack[] = $videoFilePath;
             }
     
-            // Create the SOS recording record with the file paths
             $sosRecording = SosRecording::create([
                 'user_id' => $this->userID,
                 'emergency_type' => $request->emergency_type,
                 'sos_type' => $request->sos_type,
                 'file_type' => $request->file_type,
-                'file_path' => $generalFilePath,  // Store the general file path if uploaded
-                'audio_file_path' => $audioFilePath,  // Store the audio file path if uploaded
-                'video_file_path' => $videoFilePath,  // Store the video file path if uploaded
+                'file_path' => $generalFilePath,
+                'audio_file_path' => $audioFilePath,
+                'video_file_path' => $videoFilePath,
             ]);
+    
+            // ✅ Update user storage usage
+            $this->addToUserStorageUsage($pathsToTrack);
     
             return successResponse('SOS Recording created successfully', $sosRecording, 201);
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
         }
     }
+
 
     /**
      * Delete an SOS recording.
@@ -92,18 +91,38 @@ class SosController extends BaseController
     {
         try {
             $sosRecording = SosRecording::find($id);
-
+    
             if (!$sosRecording || $sosRecording->user_id !== $this->userID) {
                 return errorResponse('Recording not found or unauthorized', 404);
             }
-
+    
+            $pathsToDelete = [];
+    
+            // Collect file paths for deletion
+            if ($sosRecording->file_path) {
+                $pathsToDelete[] = $sosRecording->file_path;
+            }
+    
+            if ($sosRecording->audio_file_path) {
+                $pathsToDelete[] = $sosRecording->audio_file_path;
+            }
+    
+            if ($sosRecording->video_file_path) {
+                $pathsToDelete[] = $sosRecording->video_file_path;
+            }
+    
+            // Delete files from disk and reduce storage
+            $this->reduceUserStorageUsage($pathsToDelete);
+    
+            // Delete the database record
             $sosRecording->delete();
-
+    
             return successResponse('SOS Recording deleted successfully', null, 200);
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
         }
     }
+
 
 
     /**

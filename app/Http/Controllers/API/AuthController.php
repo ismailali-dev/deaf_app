@@ -23,6 +23,10 @@ use App\Http\Resources\Common\ProfileResource;
 use Cache;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Str;
+use App\Models\ParentApprovalRequest;
+use App\Models\Plan;
+use App\Models\Subscription;
+
 /**
  * @group Auth
  *
@@ -53,7 +57,7 @@ class AuthController extends BaseController
         
         // Generate OTP
         $otp = Otp::generate($data['email']);
-    
+
            
         if (!$otp->status) {
             return errorResponse($otp->message, 413);
@@ -214,6 +218,10 @@ class AuthController extends BaseController
     
         
         $validatedData['profile_status'] = 'complete';
+        
+        $validatedData['storage_used_in_bytes'] = 0;
+        
+        
         // Update the user profile with the validated data
         $user->update($validatedData);
         
@@ -239,7 +247,51 @@ class AuthController extends BaseController
     /**
      * Login 
      */
-   public function login(LoginRequest $request)
+//   public function login(LoginRequest $request)
+//     {
+//         $credentials = $request->only(['email', 'password']);
+    
+//         try {
+//             if ($token = auth('api')->attempt($credentials)) {
+//                 $user = auth('api')->user();
+    
+                
+//                 // Role ID check
+//                 if ($user->role_id != $request->role_id) {
+                    
+//                     if ($user->role_id == 3) {
+//                         return errorResponse('Access Denied! Deaf users cannot access Listener accounts.', 403);
+//                     } elseif ($user->role_id == 2) {
+//                         return errorResponse('Access Denied! Listener users cannot access Deaf accounts.', 403);
+//                     } else {
+//                         return errorResponse('Unauthorized access detected.', 403);
+//                     }
+//                 }
+    
+//                 $success['token'] = $token;
+    
+//                 // Device info update
+//                 if ($request->has('device_type')) {
+//                     $deviceInfo = $request->except(['email', 'password', 'role_id']);
+//                     $user->devices()->updateOrCreate(['device_type' => $request->device_type], $deviceInfo);
+//                 }
+                
+          
+    
+//                 $user = ProfileResource::make($user);
+//                 $success['user'] = $user;
+    
+//                 return successResponse('Logged in successfully', $success);
+//             } else {
+//                 return errorResponse('Wrong credentials - Email or Password is incorrect');
+//             }
+//         } catch (\Exception $e) {
+//             return errorResponse($e->getMessage(), $e->getCode() ?: 500);
+//         }
+//     }
+
+
+    public function login(LoginRequest $request)
     {
         $credentials = $request->only(['email', 'password']);
     
@@ -247,10 +299,8 @@ class AuthController extends BaseController
             if ($token = auth('api')->attempt($credentials)) {
                 $user = auth('api')->user();
     
-                
-                // Role ID check
+                // Check if role matches
                 if ($user->role_id != $request->role_id) {
-                    
                     if ($user->role_id == 3) {
                         return errorResponse('Access Denied! Deaf users cannot access Listener accounts.', 403);
                     } elseif ($user->role_id == 2) {
@@ -260,18 +310,26 @@ class AuthController extends BaseController
                     }
                 }
     
-                $success['token'] = $token;
+                // Store device info with FCM token
+                if ($request->has('device_token') && $request->has('device_type')) {
+                    $deviceData = [
+                        'device_token' => $request->device_token,
+                        'device_type' => $request->device_type,
+                        'device_info' => $request->device_info ?? null,
+                    ];
     
-                // Device info update
-                if ($request->has('device_type')) {
-                    $deviceInfo = $request->except(['email', 'password', 'role_id']);
-                    $user->devices()->updateOrCreate(['device_type' => $request->device_type], $deviceInfo);
+                    // Ensure relation is defined in User model
+                    $user->devices()->updateOrCreate(
+                        ['device_token' => $request->device_token],
+                        $deviceData
+                    );
                 }
-                
-          
     
-                $user = ProfileResource::make($user);
-                $success['user'] = $user;
+                // Prepare response
+                $success = [
+                    'token' => $token,
+                    'user' => new ProfileResource($user),
+                ];
     
                 return successResponse('Logged in successfully', $success);
             } else {
@@ -281,6 +339,7 @@ class AuthController extends BaseController
             return errorResponse($e->getMessage(), $e->getCode() ?: 500);
         }
     }
+
 
 
 
@@ -412,7 +471,7 @@ class AuthController extends BaseController
         $request->validate([
             'email' => 'required|email',
             'device_id' => 'required_if:context,signup|string',
-            'context' => 'required|in:signup,forgot_password',
+            'context' => 'required|in:signup,forgot_password,parent_approval',
         ]);
     
         $email = $request->email;
@@ -432,7 +491,30 @@ class AuthController extends BaseController
                 return errorResponse('Email does not match the registered session data.',404);
                 
             }
-        } else {
+        } 
+        elseif ($context === 'parent_approval') {
+            $parentRequest = ParentApprovalRequest::where('email', $email)
+                                ->latest()
+                                ->first();
+
+            if (!$parentRequest) {
+                return errorResponse('No parent approval request found for this email.', 404);
+            }
+
+            
+            $otp = Otp::generate($email);
+            if (!$otp->status) {
+                
+                return errorResponse($otp->message,413);
+              
+            }
+        
+            // Send OTP via email
+             Mail::to($email)->send(new OtpEmail($otp->token));
+        
+            return successResponse('OTP sent successfully to your email.');
+        }
+        else {
             // For forgot password, check if the user exists
             $user = User::where('email', $email)->first();
             if (!$user) {
@@ -467,7 +549,7 @@ class AuthController extends BaseController
             'email' => 'required|email',
             'otp' => 'required|digits:4',
             'device_id' => 'required_if:context,signup|string',
-            'context' => 'required|in:signup,forgot_password',
+            'context' => 'required|in:signup,forgot_password,parent_approval',
         ]);
     
     
@@ -525,7 +607,22 @@ class AuthController extends BaseController
             return successResponse('Email verified successfully. Please complete your profile', $success);
     
            
-        } else {
+        } 
+        elseif ($context === 'parent_approval') {
+            $parentRequest = ParentApprovalRequest::where('email', $email)
+                                ->latest()
+                                ->first();
+
+            if (!$parentRequest) {
+                return errorResponse('No parent approval request found for this email.', 404);
+            }
+
+            $parentRequest->is_approved_by_parent = true;
+            $parentRequest->save();
+
+            return successResponse('Parent approval verified successfully.');
+        }
+        else {
             
             
             return successResponse('OTP verified successfully. You can now reset your password.');
@@ -604,6 +701,56 @@ class AuthController extends BaseController
         }
     }
     
+    
+    
+   public function handleSubscription(Request $request)
+    {
+        $data = $request->input('event');
+    
+        // Validate required fields
+        if (!isset($data['app_user_id'], $data['product_id'])) {
+            return response()->json(['message' => 'Invalid payload: missing user ID or product ID'], 400);
+        }
+    
+        // Find user
+        $user = User::where('email', $data['app_user_id'])->first();
+        if (!$user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+    
+        // If event is expiration, mark subscription as inactive
+        if ($data['type'] === 'EXPIRATION') {
+            $subscription = $user->subscription;
+            if ($subscription) {
+                $subscription->update(['status' => 'inactive']);
+            }
+            return response()->json(['message' => 'Subscription expired']);
+        }
+    
+        // Lookup plan using product_id from RevenueCat
+        $plan = Plan::where('revenuecat_product_id', $data['product_id'])->first();
+        if (!$plan) {
+            return response()->json(['message' => 'Plan not found'], 400);
+        }
+    
+        // Remove old subscription (if exists)
+        if ($user->subscription) {
+            $user->subscription->delete();
+        }
+    
+        // Create or update the subscription
+        Subscription::updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'plan_id' => $plan->id,
+                'product_id' => $data['product_id'],
+                'expires_at' => isset($data['expiration_at_ms']) ? Carbon::createFromTimestampMs($data['expiration_at_ms']) : null,
+                'status' => 'active',
+            ]
+        );
+    
+        return response()->json(['message' => 'Subscription updated']);
+    }
    
     
    

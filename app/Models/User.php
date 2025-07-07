@@ -19,6 +19,7 @@ use Multicaret\Acquaintances\Traits\CanRate;
 use Multicaret\Acquaintances\Traits\CanBeRated;
 use Multicaret\Acquaintances\Models\Friendship;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends \TCG\Voyager\Models\User implements JWTSubject
 {
@@ -28,6 +29,7 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
     use CanFollow, CanBeFollowed;
     use CanLike, CanBeLiked;
     use CanRate, CanBeRated;
+    use SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -53,7 +55,8 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
         'email_verified_at',  // Add this field to the fillable array
         'medical_conditions', 
         'race', 
-        'armed'
+        'armed',
+        'storage_used_in_bytes'
     ];
     
     
@@ -261,6 +264,13 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
     {
         return $this->hasMany(SosRecording::class);
     }
+    
+    
+    public function subscription()
+    {
+        return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+    
     
    
     

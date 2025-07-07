@@ -42,6 +42,7 @@ class Kernel extends HttpKernel
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            // \App\Http\Middleware\CheckStorageLimit::class,
             
             
         ],
@@ -71,7 +72,8 @@ class Kernel extends HttpKernel
     
     protected $routeMiddleware = [
         
-        'JwtTokenRefresh' => \App\Http\Middleware\JwtTokenRefresh::class
+        'JwtTokenRefresh' => \App\Http\Middleware\JwtTokenRefresh::class,
+        'check.storage.limit' => \App\Http\Middleware\CheckStorageLimit::class,
 
     ];
 }

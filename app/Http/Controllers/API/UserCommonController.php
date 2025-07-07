@@ -34,6 +34,7 @@ use App\Models\AudioFile;
 use App\Models\Pairing;
 use App\Models\Connection;
 use Illuminate\Support\Facades\Auth;
+use App\Services\FirebaseService;
 
 class UserCommonController extends BaseController
 {
@@ -207,6 +208,25 @@ class UserCommonController extends BaseController
             catch (\Throwable $th) {
                 return errorResponse($th->getMessage(), 500);
         }
+    }
+    
+    
+    public function deleteMyAccount(Request $request)
+    {
+        $user = Auth::user();
+        
+       
+        try {  
+            if ($user) {
+                $user->delete(); 
+                return successResponse('Account deleted successfully');
+            }
+        } catch (\Throwable $th) {
+            return errorResponse($th->getMessage(), 500);
+        }
+       
+        
+                    
     }
     
     
@@ -514,7 +534,7 @@ public function getActivatelistenerUersCount()
         return successResponse("Settings updated successfully.");
     }
     
-    public function sendPairingRequest(Request $request)
+    public function sendPairingRequest(Request $request,FirebaseService $firebase)
     {
         $request->validate([
             'receiver_id' => 'required|exists:users,id',
@@ -538,6 +558,15 @@ public function getActivatelistenerUersCount()
     
         // Broadcast pairing request with room id
         broadcast(new PairingRequestSent($sender, $receiver, $sender->current_room_id));
+        $deviceTokens = $receiver->devices()->pluck('device_token')->toArray();
+    
+                if (!empty($deviceTokens)) {
+                   $firebase->sendNotificationToMultiple(
+                        $deviceTokens,
+                        'New Pairing Request',
+                        $sender->name . ' has sent you a pairing request.'
+                    );
+                }
     
         NoRespond::dispatch($sender->id, $receiver->id)->delay(now()->addSeconds(15));
     
@@ -590,11 +619,21 @@ public function getActivatelistenerUersCount()
         
        $connectedCounts =  \App\Models\Connection::where('status','connected')->count();
         
-       
+    //   $deviceTokens = $sender->devices()->pluck('device_token')->toArray();
+    //     if (!empty($deviceTokens)) {
+    //         $firebase->sendNotificationToMultiple(
+    //             $deviceTokens,
+    //             'Pairing Request Accepted',
+    //             $receiver->name . ' has accepted your pairing request. You are now connected.'
+    //         );
+    //     }
     
         // Broadcast pairing accepted
         broadcast(new PairingRequestAccepted($sender, $receiver, $roomId,$connectedCounts));
         broadcast(new PairingRequestAcceptedCount($roomId,$connectedCounts));
+        
+        
+
     
         return successResponse('Pairing request accepted', ['room_id' => $roomId]);
     }
