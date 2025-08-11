@@ -26,6 +26,8 @@ use Illuminate\Support\Str;
 use App\Models\ParentApprovalRequest;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Notifications\FirebasePushNotification;
+
 
 /**
  * @group Auth
@@ -76,6 +78,7 @@ class AuthController extends BaseController
         $request->validate([
              'google_token' => 'required|string',
              'device_type' => 'sometimes|string', 
+             'role_id' => 'required|in:2,3',
         ]);
         
 
@@ -86,7 +89,7 @@ class AuthController extends BaseController
             list($header, $payload, $signature) = explode('.', $idToken);
             $jsonToken = base64_decode($payload);
             $payload = json_decode($jsonToken, true);
-          
+            
     
             // Check if user already exists
             $user = User::where('email', $payload['email'])->first();
@@ -115,7 +118,7 @@ class AuthController extends BaseController
                     $success['user'] = ProfileResource::make($user);
                   
     
-                    return successResponse('Login successful. Please complete your profile.', $success);
+                    return successResponse('Logged In successful.', $success);
                 }
     
                 // For users with a complete profile, generate a token
@@ -139,13 +142,23 @@ class AuthController extends BaseController
             $username = !empty($payload['given_name']) ? $payload['given_name'] : explode('@', $payload['email'])[0];
 
             // User does not exist, register them
+            // $user = User::create([
+            //     'name' => $name,
+            //     'email' => $payload['email'],
+            //     'google_id' => '', 
+            //     'username' => $username, 
+            //     'password' => Hash::make(Str::random(16)), 
+            //     'profile_status' => 'incomplete', // Mark profile as incomplete
+            // ]);
+            
             $user = User::create([
                 'name' => $name,
                 'email' => $payload['email'],
                 'google_id' => '', 
                 'username' => $username, 
                 'password' => Hash::make(Str::random(16)), 
-                'profile_status' => 'incomplete', // Mark profile as incomplete
+                'profile_status' => 'complete',
+                'role_id' => $request->role_id,
             ]);
     
             // Automatically log in the new user
@@ -162,7 +175,8 @@ class AuthController extends BaseController
             $success['user'] = ProfileResource::make($user);
             
     
-            return successResponse('Signup successful. Please complete your profile.', $success);
+            return successResponse('Logged In successful.', $success);
+            
         } catch (\Exception $e) {
             return errorResponse('Google token verification failed: ' . $e->getMessage(), 500);
         }
@@ -178,7 +192,7 @@ class AuthController extends BaseController
         $validatedData = $request->validate([
             // 'user_id' => 'required|exists:users,id',
             'device_id' => 'required|string',
-            'name' => 'required|string|max:255',
+            'name' => 'nullable|string|max:255',
             'address' => 'required',
             'date_of_birth' => 'nullable|date',
             'gender' => 'nullable|in:male,female,other',
@@ -703,55 +717,215 @@ class AuthController extends BaseController
     
     
     
-   public function handleSubscription(Request $request)
+    public function handleSubscription(Request $request)
     {
-        $data = $request->input('event');
+        $data = $request->all();
+        $user = User::where('email', @$data['event']['app_user_id'])->first();
     
-        // Validate required fields
-        if (!isset($data['app_user_id'], $data['product_id'])) {
-            return response()->json(['message' => 'Invalid payload: missing user ID or product ID'], 400);
-        }
-    
-        // Find user
-        $user = User::where('email', $data['app_user_id'])->first();
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
         }
     
-        // If event is expiration, mark subscription as inactive
-        if ($data['type'] === 'EXPIRATION') {
-            $subscription = $user->subscription;
-            if ($subscription) {
-                $subscription->update(['status' => 'inactive']);
+        $platform = strtolower(@$data['event']['store']);
+        $productId = @$data['event']['product_id'];
+    
+        if ($platform === 'play_store') {
+            $plan = Plan::where(function ($q) use ($productId) {
+                $q->where('play_store_monthly_product_id', $productId)
+                  ->orWhere('play_store_yearly_product_id', $productId);
+            })->first();
+    
+            if (!$plan) {
+                return response()->json(['message' => 'Plan not found OR Invalid Product Id'], 404);
             }
-            return response()->json(['message' => 'Subscription expired']);
+    
+            return $this->handleGoogleSubscription($data['event'], $user, $plan, $platform, $productId);
+    
+        } elseif ($platform === 'app_store') {
+            $plan = Plan::where(function ($q) use ($productId) {
+                $q->where('app_store_monthly_product_id', $productId)
+                  ->orWhere('app_store_yearly_product_id', $productId);
+            })->first();
+    
+            if (!$plan) {
+                return response()->json(['message' => 'Plan not found OR Invalid Product Id'], 404);
+            }
+    
+            return $this->handleAppleSubscription($data['event'], $user, $plan, $platform, $productId);
         }
     
-        // Lookup plan using product_id from RevenueCat
-        $plan = Plan::where('revenuecat_product_id', $data['product_id'])->first();
-        if (!$plan) {
-            return response()->json(['message' => 'Plan not found'], 400);
-        }
-    
-        // Remove old subscription (if exists)
-        if ($user->subscription) {
-            $user->subscription->delete();
-        }
-    
-        // Create or update the subscription
-        Subscription::updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'plan_id' => $plan->id,
-                'product_id' => $data['product_id'],
-                'expires_at' => isset($data['expiration_at_ms']) ? Carbon::createFromTimestampMs($data['expiration_at_ms']) : null,
-                'status' => 'active',
-            ]
-        );
-    
-        return response()->json(['message' => 'Subscription updated']);
+        return response()->json(['message' => 'Invalid platform'], 400);
     }
-   
+     private function handleGoogleSubscription($data, $user, $membership, $platform, $productId)
+    {
+        $now = now();
+        $status = $this->mapGoogleStatus(@$data['type']);
+        $expires_at = isset($data['expiration_at_ms']) ? Carbon::createFromTimestampMs($data['expiration_at_ms'])->setTimezone('UTC') : null;
+        $endsAt = $expires_at;
+        $renewableType = $membership->getRenewableTypeForProduct($platform, $productId);
+    
+        $subscription = Subscription::where('subscription_id', @$data['original_transaction_id'])
+            ->where('platform', 'google')
+            ->first();
+    
+        if (!$subscription) {
+            $datasubscription = [
+                'user_id' => $user->id,
+                'title' => @$data['entitlement_ids'][0],
+                'plan_id' => $membership->id,
+                'amount' => @$data['price'],
+                'platform' => 'google',
+                'renewable_type' => $renewableType,
+                'renewable_date' => $expires_at,
+                'subscription_id' => @$data['original_transaction_id'],
+                'status' => $status,
+                'ends_at' => $endsAt,
+                'is_active' => $status === 'expired' ? 0 : 1,
+                'is_cancelled' => 0,
+                'cancelled_at' => null,
+            ];
+    
+            $subscription = Subscription::create($datasubscription);
+    
+            $subscriptionName = @$data['entitlement_ids'][0];
+            if ($subscriptionName === 'AI Profit- under construction') {
+                $subscriptionName = "AI Profit";
+            }
+    
+            $title = 'Billing Alert';
+            $amount = number_format(@$data['price'], 2);
+            $body = "You’ve been charged $$amount for $subscriptionName Subscription. Thank you for staying with Deaf Talk!";
+            $user->notify(new FirebasePushNotification($title, $body));
+    
+        } else {
+            $updateData = [
+                'status' => $status,
+                'ends_at' => $endsAt,
+            ];
+    
+            $notifications = [
+                'expired' => [
+                    'is_active' => 0,
+                    'title' => 'Subscription Expired',
+                    'message' => 'subscription has been expired. Renew anytime to continue using Deaf Talk.'
+                ],
+                'cancelled' => [
+                    'is_cancelled' => 1,
+                    'cancelled_at' => Carbon::now('UTC'),
+                    'message' => 'subscription has been canceled. Renew anytime to continue using Deaf Talk.'
+                ]
+            ];
+    
+            if (isset($notifications[$status])) {
+                $updateData = array_merge($updateData, $notifications[$status]);
+                $subscriptionName = @$data['entitlement_ids'][0];
+                if ($subscriptionName === 'AI Profit- under construction') {
+                    $subscriptionName = "AI Profit";
+                }
+                $body = "Your $subscriptionName {$notifications[$status]['message']}";
+                $user->notify(new FirebasePushNotification($subscriptionName, $body));
+            }
+    
+            $subscription->update($updateData);
+        }
+    
+        return response()->json(['message' => 'Google Subscription Updated']);
+    }
+    
+    private function handleAppleSubscription($data, $user, $membership, $platform, $productId)
+    {
+        $status = $this->mapAppleStatus($data['type']);
+        $expires_at = isset($data['expiration_at_ms']) ? Carbon::createFromTimestampMs($data['expiration_at_ms'])->setTimezone('UTC') : null;
+        $endsAt = $expires_at;
+        $renewableType = $membership->getRenewableTypeForProduct($platform, $productId);
+    
+        $subscription = Subscription::where('subscription_id', $data['original_transaction_id'])
+            ->where('platform', 'apple')
+            ->first();
+    
+        if (!$subscription) {
+            $subscription = Subscription::create([
+                'user_id' => $user->id,
+                'plan_id' => $membership->id,
+                'title' => $data['entitlement_ids'][0],
+                'amount' => $data['price'],
+                'platform' => 'apple',
+                'renewable_type' => $renewableType,
+                'renewable_date' => $expires_at,
+                'subscription_id' => $data['original_transaction_id'],
+                'status' => $status,
+                'ends_at' => $endsAt,
+                'is_active' => $status === 'expired' ? 0 : 1,
+                'is_cancelled' => 0,
+                'cancelled_at' => null,
+            ]);
+    
+            $title = 'Billing Alert';
+            $amount = number_format($data['price'], 2);
+            $body = "You’ve been charged $$amount. Thank you for staying with Deaf Talk!";
+            $user->notify(new FirebasePushNotification($title, $body));
+    
+        } else {
+            $updateData = [
+                'status' => $status,
+                'ends_at' => $endsAt,
+            ];
+    
+            $notifications = [
+                'expired' => [
+                    'is_active' => 0,
+                    'title' => 'Subscription Expired',
+                    'message' => 'subscription has been expired. Renew anytime to continue using Deaf Talk.'
+                ],
+                'cancelled' => [
+                    'is_cancelled' => 1,
+                    'cancelled_at' => Carbon::now('UTC'),
+                    'title' => 'Subscription Canceled',
+                    'message' => 'subscription has been canceled. Renew anytime to continue using Deaf Talk.'
+                ]
+            ];
+    
+            if (isset($notifications[$status])) {
+                $updateData = array_merge($updateData, $notifications[$status]);
+                $subscriptionName = @$data['entitlement_ids'][0];
+                $body = "Your $subscriptionName {$notifications[$status]['message']}";
+                $user->notify(new FirebasePushNotification($notifications[$status]['title'], $body));
+            }
+    
+            $subscription->update($updateData);
+        }
+    
+        return response()->json(['message' => 'Apple Subscription Updated']);
+    }
+
+
+     private function mapGoogleStatus($periodType)
+        {
+            switch ($periodType) {
+                case 'INITIAL_PURCHASE': return 'active';
+                case 'CANCELLATION': return 'cancelled';
+                case 'EXPIRATION': return 'expired';
+                case 'EXPIRED': return 'expired';
+                case 'RENEWAL' : return 'active';
+                case 'TRIAL': return 'pending';
+                default: return 'pending';
+            }
+        }
+        
+        private function mapAppleStatus($type)
+        {
+            switch ($type) {
+                case 'INITIAL_PURCHASE': return 'active';
+                case 'CANCELLATION': return 'cancelled';
+                case 'EXPIRATION': return 'expired';
+                case 'EXPIRED': return 'expired';
+                case 'RENEWAL' : return 'active';
+                case 'TRIAL': return 'pending';
+                default: return 'pending';
+            }
+        }
+        
+    
     
    
     

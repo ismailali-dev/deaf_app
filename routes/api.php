@@ -30,14 +30,14 @@ Route::group(['prefix'=>'auth'], function () {
     Route::post('logout', 'AuthController@logout')->middleware('auth:api');
     Route::post('refresh-token', 'AuthController@refreshJWTToken')->middleware('JwtTokenRefresh');
     
-    Route::get('forgot-password', 'AuthController@forgotPassword');
+    Route::post('forgot-password', 'AuthController@forgotPassword');
 
     Route::post('resend-otp', 'AuthController@resendOtp');    // Resend OTP for both signup and forgot password
     Route::post('verify-otp', 'AuthController@verifyOtp');    // Verify OTP for both signup and forgot password   
     
     Route::post('reset-password', 'AuthController@resetPassword');
     
-    Route::post('/webhook/revenuecat', 'AuthController@handleSubscription');
+    Route::post('/webhook/update-subscription-status', 'AuthController@handleSubscription');
     
     
 });
@@ -54,6 +54,14 @@ Route::group(['prefix'=>'common'], function () {
             Route::post('update-profile', 'UserCommonController@updateProfile');
             Route::post('change-password', 'UserCommonController@changePassword');
             Route::post('delete-my-account', 'UserCommonController@deleteMyAccount');
+            
+            Route::group(['prefix'=>'notifications'], function () {
+                Route::get('/','NotificationController@index');
+                Route::post('mark-as-read','NotificationController@markAsRead');
+                Route::post('clear','NotificationController@clearAllNotifications');
+            });
+                
+
             
             //users apis 
             Route::group(['prefix'=>'users'], function () {

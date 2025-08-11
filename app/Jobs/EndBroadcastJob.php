@@ -3,57 +3,51 @@
 namespace App\Jobs;
 
 use App\Models\Broadcast;
+use App\Events\BroadcastEnded;
 use Illuminate\Bus\Queueable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Pusher\Pusher;
-use App\Events\BroadcastAutoEnded;
 
 class EndBroadcastJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected $broadcastId;
-    /**
-     * Create a new job instance.
-     *
-     * @param int $broadcastId
-     */
+
     public function __construct(int $broadcastId)
     {
         $this->broadcastId = $broadcastId;
     }
 
-    /**
-     * Execute the job.
-     *
-     * @return void
-     */
-     
     public function handle()
     {
         $broadcast = Broadcast::find($this->broadcastId);
-        
+    
         if (!$broadcast || $broadcast->status === 'inactive') {
-            return; // Exit without executing the job
+            return;
         }
     
+        $broadcast->update(['status' => 'inactive']);
     
-        if ($broadcast && $broadcast->status === 'active') {
-            // Mark the broadcast as ended
-            $broadcast->update(['status' => 'inactive']);
+        $isPublic = $broadcast->type === 'all';
     
-            // Trigger the BroadcastEnded event
-            event(new BroadcastAutoEnded($broadcast));
-        }
-    }
+        // Determine allowed user IDs
+        $allowedUserIds = $isPublic
+            ? $broadcast->user->getFriends()->pluck('id')->toArray()
+            : json_decode($broadcast->allowed_user_ids, true) ?? [];
     
-    public function uniqueId()
-    {
-        return $this->broadcastId; // Unique identifier
+        // Fire event to viewers
+        broadcast(new BroadcastEnded($broadcast, $allowedUserIds, $isPublic, false)); // false here
+    
+        // Fire event to owner only if autoEnded
+        broadcast(new BroadcastEnded($broadcast, [], false, true));
     }
 
-   
+
+    public function uniqueId()
+    {
+        return $this->broadcastId;
+    }
 }

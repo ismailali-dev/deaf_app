@@ -27,6 +27,7 @@ use App\Jobs\EndBroadcastJob;
  use App\Models\UserReport;
 use App\Mail\AccountSuspendedMail;
 use App\Services\FirebaseService;
+use App\Notifications\FirebasePushNotification;
 use DB;
 
 
@@ -38,7 +39,7 @@ class BroadCastController extends BaseController
         try {
             $currentUserId = auth()->id();
             
-           
+          
     
             // Query users excluding the current user and those with role_id = 1
             $query = User::select('users.*', 
@@ -48,12 +49,23 @@ class BroadCastController extends BaseController
                          ->where('friendships.sender_id', '=', $currentUserId);
                 })
                 ->where('users.id', '!=', $currentUserId)
-                ->where('users.role_id', '!=', 1)
-                ->where(function ($query) {
-                    $query->whereNull('friendships.status')
-                          ->orWhere('friendships.status', '!=', 'accepted')->Where('friendships.status','!=', 'blocked');
+                ->where('users.role_id', '!=', 1);
+                
+                
+                 if($request->isWithFriends == 'false'){
+                        $query->where(function ($query) {
+                            $query->whereNull('friendships.status')
+                                  ->orWhere('friendships.status', '!=', 'accepted')->Where('friendships.status','!=', 'blocked');
+                                  
+                        });
+                   }
+           
+           
+                // // ->where(function ($query) {
+                // //     $query->whereNull('friendships.status')
+                // //           ->orWhere('friendships.status', '!=', 'accepted')->Where('friendships.status','!=', 'blocked');
                           
-                });
+                // // });
                 
             $users = $this->getFilteredData($request, $query);
     
@@ -243,6 +255,12 @@ class BroadCastController extends BaseController
                         // Update status from cancelled to pending
                         $existingRequest->update(['status' => 'pending']);
                         return successResponse('Friend request sent again.');
+                        
+                         $recipient->notify(new FirebasePushNotification(
+                                'Friend request',
+                                'Friend request sent again.'
+                            ));
+                
                     }
                 } else {
                     
@@ -257,6 +275,13 @@ class BroadCastController extends BaseController
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+                    
+                     $recipient->notify(new FirebasePushNotification(
+                                'Friend request',
+                                'Friend request sent again.'
+                            ));
+                            
+                            
                     return successResponse('Friend request sent successfully.');
                 }
             } elseif ($request->action === 'cancel') {
@@ -335,7 +360,7 @@ class BroadCastController extends BaseController
 
 
    //Report user 
-    public function reportUser(Request $request, FirebaseService $firebase)
+    public function reportUser(Request $request)
     {
         try {
             $request->validate([
@@ -375,16 +400,14 @@ class BroadCastController extends BaseController
                 // Email suspension notice
                 Mail::to($reportedUser->email)->send(new AccountSuspendedMail($reportedUser));
     
-                // Send FCM notification to all of the user's devices
-                $deviceTokens = $reportedUser->devices()->pluck('device_token')->toArray();
     
-                if (!empty($deviceTokens)) {
-                    $firebase->sendNotificationToMultiple(
-                        $deviceTokens,
-                        'Account Suspended',
-                        'Your account has been suspended due to multiple reports.'
-                    );
-                }
+                $reportedUser->notify(new FirebasePushNotification(
+                    'Account Suspended',
+                    'Your account has been suspended due to multiple reports.'
+                ));
+            
+            
+                
             }
     
             return successResponse("User reported successfully.");
@@ -428,7 +451,7 @@ class BroadCastController extends BaseController
         }
     }
 
-    public function sendParentApprovalRequest(Request $request,FirebaseService $firebase)
+    public function sendParentApprovalRequest(Request $request, FirebaseService $firebase)
     {
         try {
             $validated = $request->validate([
@@ -438,7 +461,15 @@ class BroadCastController extends BaseController
                 'email' => 'required|email|max:255',
                 'id_type' => 'required|in:driving_license,social_security',
                 'id_number' => 'required|string|max:255',
+                'ssn_number' => 'required|string|max:255',
+                'parent_id_doc' => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048',
             ]);
+    
+            if ($request->hasFile('parent_id_doc')) {
+                $file = $request->file('parent_id_doc');
+                $path = $file->store('parent_id_docs', 'public');
+                $validated['parent_id_doc'] = $path;
+            }
     
             $validated['user_id'] = auth()->id();
             $validated['is_approved_by_parent'] = false;
@@ -450,19 +481,16 @@ class BroadCastController extends BaseController
                 ParentApprovalRequest::create($validated);
             }
     
-            // Generate OTP
+            // Generate and send OTP
             $otp = Otp::generate($validated['email']);
-    
             if (!$otp->status) {
                 return errorResponse($otp->message, 413);
             }
     
-            // send OTP email
             Mail::to($validated['email'])->send(new OtpEmail($otp->token));
-            
-            // 🔔 Firebase Notification (to user or backup device)
+    
             $user = auth()->user();
-            $deviceTokens = $user->devices()->pluck('device_token')->toArray(); // or notify parent if token saved elsewhere
+            $deviceTokens = $user->devices()->pluck('device_token')->toArray();
     
             if (!empty($deviceTokens)) {
                 $firebase->sendNotificationToMultiple(
@@ -471,7 +499,6 @@ class BroadCastController extends BaseController
                     'We have sent a verification code to ' . $validated['email'] . ' for parent approval.'
                 );
             }
-        
     
             return successResponse('Parent approval request submitted successfully. OTP sent to parent email.');
     
@@ -479,6 +506,7 @@ class BroadCastController extends BaseController
             return errorResponse($th->getMessage(), 500);
         }
     }
+
 
     
 
@@ -544,6 +572,12 @@ class BroadCastController extends BaseController
             // Handle the action
             if ($action === 'accept') {
                 $user->acceptFriendRequest($sender);
+                
+                 $sender->notify(new FirebasePushNotification(
+                            'Friend request',
+                            'Friend request sent again.'
+                        ));
+                            
                 return successResponse('Friend request accepted successfully');
             } elseif ($action === 'deny') {
                 $user->denyFriendRequest($sender);
@@ -724,112 +758,202 @@ class BroadCastController extends BaseController
 
    
 
-    public function startBroadcast(Request $request)
-        {
-            $rules = [
-                'latitude' => 'required|numeric',
-                'longitude' => 'required|numeric',
-                'broadcastForAll' => 'required|boolean',
-            ];
+    // public function startBroadcast(Request $request)
+    //     {
+    //         $rules = [
+    //             'latitude' => 'required|numeric',
+    //             'longitude' => 'required|numeric',
+    //             'broadcastForAll' => 'required|boolean',
+    //         ];
         
-            if (!$request->broadcastForAll) {
-                $rules['user_ids'] = 'required|array|min:1';
-                $rules['user_ids.*'] = 'integer|exists:users,id';
-                $rules['duration'] = 'required|string|regex:/^\d{2}:\d{2}$/';
-            }
+    //         if (!$request->broadcastForAll) {
+    //             $rules['user_ids'] = 'required|array|min:1';
+    //             $rules['user_ids.*'] = 'integer|exists:users,id';
+    //             $rules['duration'] = 'required|string|regex:/^\d{2}:\d{2}$/';
+    //         }
         
-            $validatedData = $request->validate($rules);
+    //         $validatedData = $request->validate($rules);
         
-            // Check if the user already has an active broadcast
-            $broadcast = Broadcast::where('user_id', auth()->id())
-                ->where('status', 'active')
-                ->first();
+    //         // Check if the user already has an active broadcast
+    //         $broadcast = Broadcast::where('user_id', auth()->id())
+    //             ->where('status', 'active')
+    //             ->first();
                 
                
         
-            if ($broadcast) {
-                // Update existing broadcast
-                $broadcast->update([
-                    'latitude' => $request->latitude,
-                    'longitude' => $request->longitude,
-                    'type' => $request->broadcastForAll ? 'all' : 'specific',
-                    'allowed_user_ids' => $request->broadcastForAll ? null : json_encode($request->user_ids),
-                    'duration' => $request->broadcastForAll ? null : $request->duration,
-                    'end_time' => $request->duration ? Carbon::now()->addMinutes($this->convertDurationToMinutes($request->duration)) : null,
-                ]);
-            } else {
-                // Create a new broadcast
-                $broadcast = Broadcast::create([
-                    'user_id' => auth()->id(),
-                    'latitude' => $request->latitude,
-                    'longitude' => $request->longitude,
-                    'type' => $request->broadcastForAll ? 'all' : 'specific',
-                    'allowed_user_ids' => $request->broadcastForAll ? null : json_encode($request->user_ids),
-                    'duration' => $request->broadcastForAll ? null : $request->duration,
-                    'status' => 'active',
-                    'end_time' => $request->duration ? Carbon::now()->addMinutes($this->convertDurationToMinutes($request->duration)) : null,
-                ]);
-            }
+    //         if ($broadcast) {
+    //             // Update existing broadcast
+    //             $broadcast->update([
+    //                 'latitude' => $request->latitude,
+    //                 'longitude' => $request->longitude,
+    //                 'type' => $request->broadcastForAll ? 'all' : 'specific',
+    //                 'allowed_user_ids' => $request->broadcastForAll ? null : json_encode($request->user_ids),
+    //                 'duration' => $request->broadcastForAll ? null : $request->duration,
+    //                 'end_time' => $request->duration ? Carbon::now()->addMinutes($this->convertDurationToMinutes($request->duration)) : null,
+    //             ]);
+    //         } else {
+    //             // Create a new broadcast
+    //             $broadcast = Broadcast::create([
+    //                 'user_id' => auth()->id(),
+    //                 'latitude' => $request->latitude,
+    //                 'longitude' => $request->longitude,
+    //                 'type' => $request->broadcastForAll ? 'all' : 'specific',
+    //                 'allowed_user_ids' => $request->broadcastForAll ? null : json_encode($request->user_ids),
+    //                 'duration' => $request->broadcastForAll ? null : $request->duration,
+    //                 'status' => 'active',
+    //                 'end_time' => $request->duration ? Carbon::now()->addMinutes($this->convertDurationToMinutes($request->duration)) : null,
+    //             ]);
+    //         }
         
         
-            // Fetch nearby broadcasts
-            $nearbyBroadcasts = $this->getNearbyData();
+    //         // Fetch nearby broadcasts
+    //         $nearbyBroadcasts = $this->getNearbyData();
             
         
-            // Notify users or perform other actions
-            // if (!$request->broadcastForAll) {
-            //     $specificUsers = User::whereIn('id', $request->user_ids)->get();
-            //     // Notification::send($specificUsers, new BroadcastNotification($broadcast));
-            // }
+    //         // Notify users or perform other actions
+    //         // if (!$request->broadcastForAll) {
+    //         //     $specificUsers = User::whereIn('id', $request->user_ids)->get();
+    //         //     // Notification::send($specificUsers, new BroadcastNotification($broadcast));
+    //         // }
         
-            // Return the broadcast data
+    //         // Return the broadcast data
             
-            if (!$request->broadcastForAll && $request->duration) {
-                $durationInMinutes = $this->convertDurationToMinutes($request->duration);
+    //         if (!$request->broadcastForAll && $request->duration) {
+    //             $durationInMinutes = $this->convertDurationToMinutes($request->duration);
                 
                 
-                // Dispatch the job to end the broadcast after the duration
-                EndBroadcastJob::dispatch($broadcast->id)->delay(now()->addMinutes($durationInMinutes));
+    //             // Dispatch the job to end the broadcast after the duration
+    //             EndBroadcastJob::dispatch($broadcast->id)->delay(now()->addMinutes($durationInMinutes));
                 
                 
               
-            }
+    //         }
 
-            $friends = auth()->user()->getFriends()->pluck('id')->toArray();
+    //         $friends = auth()->user()->getFriends()->pluck('id')->toArray();
             
           
             
-            broadcast(new BroadcastStarted($broadcast, $nearbyBroadcasts,$friends));
+    //         broadcast(new BroadcastStarted($broadcast, $nearbyBroadcasts,$friends));
             
-            return successResponse('Broadcast started successfully.', new BroadcastResource($broadcast));
-        }
-
-    // End Broadcast
-    public function endBroadcast()
+    //         return successResponse('Broadcast started successfully.', new BroadcastResource($broadcast));
+    //     }
+    
+    
+    
+    public function startBroadcast(Request $request)
     {
+        $rules = [
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+            'broadcastForAll' => 'required|boolean',
+        ];
+    
+        if (!$request->broadcastForAll) {
+            $rules['user_ids'] = 'required|array|min:1';
+            $rules['user_ids.*'] = 'integer|exists:users,id';
+            $rules['duration'] = 'required|string|regex:/^\d{2}:\d{2}$/';
+        }
+    
+        $validatedData = $request->validate($rules);
+    
+        // Determine allowed users
+        $isPublic = $request->broadcastForAll;
+        $allowedUserIds = $isPublic
+            ? auth()->user()->getFriends()->pluck('id')->toArray()
+            : $request->user_ids;
+    
+        // Check for existing active broadcast
         $broadcast = Broadcast::where('user_id', auth()->id())
             ->where('status', 'active')
             ->first();
-
+    
+        // Prepare common data
+        $commonData = [
+            'latitude' => $request->latitude,
+            'longitude' => $request->longitude,
+            'type' => $isPublic ? 'all' : 'specific',
+            'allowed_user_ids' => json_encode($allowedUserIds),
+            'duration' => !$isPublic ? $request->duration : null,
+            'end_time' => (!$isPublic && $request->duration)
+                ? Carbon::now()->addMinutes($this->convertDurationToMinutes($request->duration))
+                : null,
+        ];
+    
+        if ($broadcast) {
+            $broadcast->update($commonData);
+        } else {
+            $broadcast = Broadcast::create(array_merge([
+                'user_id' => auth()->id(),
+                'status' => 'active',
+            ], $commonData));
+        }
+    
+        // Schedule end if duration is set (for specific broadcasts)
+        if (!$isPublic && $request->duration) {
+            $durationInMinutes = $this->convertDurationToMinutes($request->duration);
+            EndBroadcastJob::dispatch($broadcast->id)->delay(now()->addMinutes($durationInMinutes));
+        }
+    
+        // Fetch nearby broadcasts
+        $nearbyBroadcasts = $this->getNearbyData();
+    
+        // Fire broadcast event with proper channel logic
+        broadcast(new BroadcastStarted(
+            $broadcast,
+            $nearbyBroadcasts,
+            $allowedUserIds,
+            $isPublic
+        ));
+    
+        return successResponse('Broadcast started successfully.', new BroadcastResource($broadcast));
+    }
+    // End Broadcast
+   public function endBroadcast()
+    {
+        $currentUser = auth()->user();
+    
+        $broadcast = Broadcast::where('user_id', $currentUser->id)
+            ->where('status', 'active')
+            ->first();
+    
         if (!$broadcast) {
             return errorResponse('No active broadcast found.', 404);
         }
-
+    
+        // Mark current user's broadcast as inactive
         $broadcast->update(['status' => 'inactive']);
-
-       
-        broadcast(new BroadcastEnded($broadcast));
-
+    
+        $isPublic = $broadcast->type === 'all';
+    
+        // Who was allowed to view this broadcast?
+        $allowedUserIds = $isPublic
+            ? $currentUser->getFriends()->pluck('id')->toArray()
+            : json_decode($broadcast->allowed_user_ids, true) ?? [];
+    
+        // Get other active broadcasts by allowed users
+        $otherActiveBroadcasts = Broadcast::where('status', 'active')
+            ->whereIn('user_id', $allowedUserIds)
+            ->get();
+    
+        //  Get the user IDs who currently have active broadcasts (among those viewers)
+        $activeBroadcastUserIds = $otherActiveBroadcasts->pluck('user_id')->unique()->values()->toArray();
+    
+        // Broadcast event to each of those users
+        broadcast(new BroadcastEnded($broadcast, $activeBroadcastUserIds, $isPublic));
+    
         return successResponse('Broadcast ended successfully.');
     }
+
 
     // Get Nearby Broadcasts
   
 
     public function getNearbyBroadcasts(Request $request)
     {
-        // Fetch the active broadcast for the authenticated user
-        $broadcast = Broadcast::where('user_id', auth()->id())
+        $userId = auth()->id();
+    
+        // Get user's active broadcast
+        $broadcast = Broadcast::where('user_id', $userId)
             ->where('status', 'active')
             ->first();
     
@@ -837,41 +961,37 @@ class BroadCastController extends BaseController
             return errorResponse('Unauthorized or no active broadcast found.', 403);
         }
     
-        $nearbyBroadcasts = $this->getNearbyData();
-    
-        $friendships = Friendship::where(function ($query) {
-        $query->where('sender_id', auth()->id())
-              ->orWhere('recipient_id', auth()->id());
+        // Fetch friendships and prepare accepted user IDs
+        $acceptedFriendIds = Friendship::where(function ($query) use ($userId) {
+                $query->where('sender_id', $userId)
+                      ->orWhere('recipient_id', $userId);
             })
-            ->whereIn('status', ['accepted', 'blocked'])
-            ->get();
-        
-        $friendshipStatuses = [];
-        
-        foreach ($friendships as $friendship) {
-            $friendId = $friendship->sender_id == auth()->id() ? $friendship->recipient_id : $friendship->sender_id;
-            $friendshipStatuses[$friendId] = $friendship->status;
-        }
-        // Use the BroadcastResource to return the broadcast data
-       $broadcastResource = new BroadcastResource($broadcast, $friendshipStatuses);
-        
-        $nearbyBroadcastsResource = BroadcastResource::collection(
-            $nearbyBroadcasts->map(function ($broadcast) use ($friendshipStatuses) {
-                return new BroadcastResource($broadcast, $friendshipStatuses);
+            ->where('status', 'accepted')
+            ->get()
+            ->map(function ($friendship) use ($userId) {
+                return $friendship->sender_id == $userId
+                    ? $friendship->recipient_id
+                    : $friendship->sender_id;
             })
-        );
+            ->unique()
+            ->values()
+            ->toArray(); // List of user_ids who are accepted friends
     
-        // Make sure to use BroadcastResource for each nearby broadcast
-        
-       
-        
+        // Mark if the main broadcast is from a friend
+        $broadcast->is_friend = in_array($broadcast->user_id, $acceptedFriendIds);
     
-        // Return the response with the data
+        // Get nearby broadcasts and mark their friendship status
+        $nearbyBroadcasts = $this->getNearbyData()->map(function ($b) use ($acceptedFriendIds) {
+            $b->is_friend = in_array($b->user_id, $acceptedFriendIds);
+            return $b;
+        });
+    
         return successResponse('Nearby broadcasts retrieved successfully.', [
-            'broadcast' => $broadcastResource,
-            'nearby_broadcasts' => $nearbyBroadcastsResource,
+            'broadcast' => new BroadcastResource($broadcast),
+            'nearby_broadcasts' => BroadcastResource::collection($nearbyBroadcasts),
         ]);
     }
+
     
     
     

@@ -21,7 +21,6 @@ class EmploymentController extends BaseController
 
     public function getEmploymentList(Request $request)
     {
-        
         $query = Employment::query();
         $employments = $this->getFilteredData($request, $query);
         $employments = EmploymentResource::collection($employments);

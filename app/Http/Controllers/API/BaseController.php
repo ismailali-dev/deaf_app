@@ -153,7 +153,7 @@ class BaseController extends Controller
         
         if($request->has('perPage')){
             // Pagination
-            $perPage = $request->has('perPage') ? $request->perPage : 50;
+            $perPage = $request->has('perPage') ? $request->perPage : 500;
             $query = $query->paginate($perPage);
         }
         else{

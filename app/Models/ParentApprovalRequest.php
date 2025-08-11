@@ -18,6 +18,8 @@ class ParentApprovalRequest extends Model
         'email',
         'id_type',
         'id_number',
+        'ssn_number',
+        'parent_id_doc',
     ];
 
     public function user()

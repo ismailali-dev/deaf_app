@@ -34,7 +34,8 @@ use App\Models\AudioFile;
 use App\Models\Pairing;
 use App\Models\Connection;
 use Illuminate\Support\Facades\Auth;
-use App\Services\FirebaseService;
+use App\Notifications\FirebasePushNotification;
+
 
 class UserCommonController extends BaseController
 {
@@ -534,7 +535,7 @@ public function getActivatelistenerUersCount()
         return successResponse("Settings updated successfully.");
     }
     
-    public function sendPairingRequest(Request $request,FirebaseService $firebase)
+    public function sendPairingRequest(Request $request)
     {
         $request->validate([
             'receiver_id' => 'required|exists:users,id',
@@ -558,15 +559,11 @@ public function getActivatelistenerUersCount()
     
         // Broadcast pairing request with room id
         broadcast(new PairingRequestSent($sender, $receiver, $sender->current_room_id));
-        $deviceTokens = $receiver->devices()->pluck('device_token')->toArray();
-    
-                if (!empty($deviceTokens)) {
-                   $firebase->sendNotificationToMultiple(
-                        $deviceTokens,
-                        'New Pairing Request',
-                        $sender->name . ' has sent you a pairing request.'
-                    );
-                }
+           
+       $receiver->notify(new FirebasePushNotification(
+            'New Pairing Request',
+            $sender->name . ' has sent you a pairing request.'
+        ));
     
         NoRespond::dispatch($sender->id, $receiver->id)->delay(now()->addSeconds(15));
     

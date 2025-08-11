@@ -15,9 +15,9 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('plan_id')->constrained();
-            $table->timestamp('expires_at')->nullable();
+            $table->timestamp('ends_at')->nullable();
             $table->string('product_id')->nullable(); // from RevenueCat
-            $table->enum('status', ['active', 'inactive'])->default('active'); // New column
+            $table->enum('status', ['active','inactive','cancelled','expired','pending'])->default('active'); 
             $table->timestamps();
         });
     }

@@ -5,49 +5,47 @@ namespace App\Events;
 use App\Models\Broadcast;
 use App\Http\Resources\BroadcastResource;
 use Illuminate\Broadcasting\Channel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
-use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Broadcasting\InteractsWithSockets;
 
 class BroadcastStarted implements ShouldBroadcastNow
 {
-    use InteractsWithSockets, SerializesModels;
+    use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public $broadcast;
     public $nearbyBroadcasts;
-    public $friends;
+    public $allowedUserIds;
+    public $isPublic;
 
-    /**
-     * Create a new event instance.
-     */
-
-
-    public function __construct($broadcast, $nearbyBroadcasts, $friends)
+    public function __construct($broadcast, $nearbyBroadcasts, $allowedUserIds = [], $isPublic = false)
     {
-        $this->friends = $friends; // Save the friends list
-
-        // Pass friends to the resources
-        $this->broadcast = new BroadcastResource($broadcast, $friends);
+        $this->broadcast = new BroadcastResource($broadcast, $allowedUserIds);
         $this->nearbyBroadcasts = BroadcastResource::collection(
-            $nearbyBroadcasts->map(function ($b) use ($friends) {
-                return new BroadcastResource($b, $friends);
-            })
+            $nearbyBroadcasts->map(fn($b) => new BroadcastResource($b, $allowedUserIds))
         );
-        
+        $this->allowedUserIds = $allowedUserIds;
+        $this->isPublic = $isPublic;
     }
-    
-    /**
-     * Get the channels the event should broadcast on.
-     */
+
     public function broadcastOn()
     {
-        return new Channel('broadcasts');
+        if ($this->isPublic) {
+            return new Channel('broadcasts');
+        }
+
+        $channels =  collect($this->allowedUserIds)
+        ->map(fn($id) => new PrivateChannel('broadcasts.' . $id))
+        ->values()
+        ->all(); // Return array of PrivateChannels
+        
+       
+        
+        return $channels;
     }
 
-    /**
-     * Get the event name the event should broadcast as.
-     */
     public function broadcastAs()
     {
         return 'broadcast.started';
