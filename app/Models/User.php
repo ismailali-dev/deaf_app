@@ -20,6 +20,9 @@ use Multicaret\Acquaintances\Traits\CanBeRated;
 use Multicaret\Acquaintances\Models\Friendship;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Hash;
+
+
 
 class User extends \TCG\Voyager\Models\User implements JWTSubject
 {
@@ -116,9 +119,9 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
     }
 
     
-    public function setPasswordAttribute($value)
+      public function setPasswordAttribute($value)
     {
-        $this->attributes['password'] = bcrypt($value);
+        $this->attributes['password'] = Hash::make($value);
     }
     
      public function getAvatarAttribute($value)

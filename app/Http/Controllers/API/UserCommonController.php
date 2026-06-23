@@ -212,24 +212,24 @@ class UserCommonController extends BaseController
     }
     
     
-    public function deleteMyAccount(Request $request)
+   public function deleteMyAccount(Request $request)
     {
-        $user = Auth::user();
-        
-       
-        try {  
-            if ($user) {
-                $user->delete(); 
-                return successResponse('Account deleted successfully');
+        try {
+
+            $user = auth()->user();
+            if (!$user) {
+                return errorResponse('User not authenticated.', 401);
             }
+            $user->forceDelete();
+            return successResponse('Account deleted successfully');
+
         } catch (\Throwable $th) {
-            return errorResponse($th->getMessage(), 500);
+
+            \Log::error('Delete Error: ' . $th->getMessage());
+
+            return errorResponse('Something went wrong.', 500);
         }
-       
-        
-                    
     }
-    
     
     public function updateLocation(Request $request)
     {

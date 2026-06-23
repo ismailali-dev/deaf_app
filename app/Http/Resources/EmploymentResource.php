@@ -30,11 +30,19 @@ class EmploymentResource extends JsonResource
         $data = parent::toArray($request);
 
         // Modify the 'employe_type' field based on the status mapping
-        $data['employe_type'] = $this->employmentTypes[$data['employe_type']] ?? 'Unknown';
+        // $data['employe_type'] = $this->employmentTypes[$data['employe_type']] ?? 'Unknown';
         
-        $data['short_description'] = str_replace('&nbsp;', ' ', html_entity_decode(strip_tags($data['short_description'])));
+        // $data['short_description'] = str_replace('&nbsp;', ' ', html_entity_decode(strip_tags($data['short_description'])));
         
-        $data['long_description'] = str_replace('&nbsp;', ' ', html_entity_decode(strip_tags($data['long_description'])));
+        // $data['long_description'] = str_replace('&nbsp;', ' ', html_entity_decode(strip_tags($data['long_description'])));
+        
+        
+        // Modify the 'employe_type' field based on the status mapping
+        @$data['employe_type'] = $this->employmentTypes[@$data['employe_type']] ?? '';
+        
+        @$data['short_description'] = str_replace('&nbsp;', ' ', html_entity_decode(strip_tags(@$data['short_description'])));
+        
+        @$data['long_description'] = str_replace('&nbsp;', ' ', html_entity_decode(strip_tags(@$data['long_description'])));
 
         return $data;
     }

@@ -91,6 +91,12 @@ class GlobalEmergencyRecording extends Model
         return $relativePath;
     }
     
+        public function getCreatedAtAttribute($value)
+    {
+        return \Carbon\Carbon::parse($value)->format('M d Y');
+    }
+    
+    
     
 
     

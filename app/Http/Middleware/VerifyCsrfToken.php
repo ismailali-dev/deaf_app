@@ -12,6 +12,11 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-       '/broadcasting/auth'
+       '/broadcasting/auth',
+       '/twiml/dial-dispatcher',
+       '/twiml/after-answer',
+        '/twiml/dispatcher',
+       'twiml/dispatcher',
+       'twiml/*'
     ];
 }

@@ -18,6 +18,11 @@ use Aws\Exception\AwsException;
 use Illuminate\Support\Str;
 use App\Http\Requests\UpdateUserProfileInfoRequest;
 use App\Http\Resources\Common\ProfileResource;
+use Twilio\Rest\Client;
+
+
+use Twilio\TwiML\VoiceResponse;
+
 
 
 class SosController extends BaseController
@@ -28,61 +33,62 @@ class SosController extends BaseController
      public function create(Request $request)
     {
         try {
+            // Validate the incoming data
             $validator = Validator::make($request->all(), [
                 'emergency_type' => 'required|string',
                 'sos_type' => 'required|in:E1,E2,E3,E4',
                 'file_type' => 'required|in:audio,video',
-                'file_path' => 'nullable|file|mimes:mp3,wav|max:10240',
-                'audio_file_path' => 'nullable|file|mimes:mp3,wav|max:51200',
-                'video_file_path' => 'nullable|file|mimes:mp4,mov,avi|max:102400',
+                'file_path' => 'nullable|file|mimes:mp3,wav|max:10240',  // Validate the audio file if provided
+                'audio_file_path' => 'nullable|file|mimes:mp3,wav|max:51200',  // Validate the audio file if provided
+                'video_file_path' => 'nullable|file|mimes:mp4,mov,avi|max:102400',  // Validate the video file if provided
             ]);
     
             if ($validator->fails()) {
                 return errorResponse($validator->errors()->first(), 422);
             }
     
+            // Initialize file paths
             $audioFilePath = null;
             $videoFilePath = null;
             $generalFilePath = null;
-            $pathsToTrack = []; // Track all uploaded file paths
     
+            // Handle file upload for general file path
             if ($request->hasFile('file_path')) {
+                // Upload the general file
                 $generalFile = $request->file('file_path');
-                $generalFilePath = $generalFile->store('sos-recordings/general_files', 'public');
-                $pathsToTrack[] = $generalFilePath;
+                $generalFilePath = $generalFile->store('sos-recordings/general_files', 'public'); // Store in 'general_files' directory
             }
     
+            // Handle file upload for audio file
             if ($request->hasFile('audio_file_path')) {
+                // Upload the audio file
                 $audioFile = $request->file('audio_file_path');
-                $audioFilePath = $audioFile->store('sos-recordings/audio', 'public');
-                $pathsToTrack[] = $audioFilePath;
+                $audioFilePath = $audioFile->store('sos-recordings/audio', 'public'); // Store in 'audio' directory
             }
     
+            // Handle file upload for video file
             if ($request->hasFile('video_file_path')) {
+                // Upload the video file
                 $videoFile = $request->file('video_file_path');
-                $videoFilePath = $videoFile->store('sos-recordings/videos', 'public');
-                $pathsToTrack[] = $videoFilePath;
+                $videoFilePath = $videoFile->store('sos-recordings/videos', 'public'); // Store in 'videos' directory
             }
     
+            // Create the SOS recording record with the file paths
             $sosRecording = SosRecording::create([
                 'user_id' => $this->userID,
                 'emergency_type' => $request->emergency_type,
                 'sos_type' => $request->sos_type,
                 'file_type' => $request->file_type,
-                'file_path' => $generalFilePath,
-                'audio_file_path' => $audioFilePath,
-                'video_file_path' => $videoFilePath,
+                'file_path' => $generalFilePath,  // Store the general file path if uploaded
+                'audio_file_path' => $audioFilePath,  // Store the audio file path if uploaded
+                'video_file_path' => $videoFilePath,  // Store the video file path if uploaded
             ]);
-    
-            // ✅ Update user storage usage
-            $this->addToUserStorageUsage($pathsToTrack);
     
             return successResponse('SOS Recording created successfully', $sosRecording, 201);
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
         }
     }
-
 
     /**
      * Delete an SOS recording.
@@ -91,38 +97,19 @@ class SosController extends BaseController
     {
         try {
             $sosRecording = SosRecording::find($id);
+            
     
-            if (!$sosRecording || $sosRecording->user_id !== $this->userID) {
+            if (!$sosRecording || $sosRecording->user_id != $this->userID) {
                 return errorResponse('Recording not found or unauthorized', 404);
             }
-    
-            $pathsToDelete = [];
-    
-            // Collect file paths for deletion
-            if ($sosRecording->file_path) {
-                $pathsToDelete[] = $sosRecording->file_path;
-            }
-    
-            if ($sosRecording->audio_file_path) {
-                $pathsToDelete[] = $sosRecording->audio_file_path;
-            }
-    
-            if ($sosRecording->video_file_path) {
-                $pathsToDelete[] = $sosRecording->video_file_path;
-            }
-    
-            // Delete files from disk and reduce storage
-            $this->reduceUserStorageUsage($pathsToDelete);
-    
-            // Delete the database record
+
             $sosRecording->delete();
-    
+
             return successResponse('SOS Recording deleted successfully', null, 200);
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
         }
     }
-
 
 
     /**
@@ -222,66 +209,66 @@ class SosController extends BaseController
     // }
    
    
-   private function saveUserVoicemail($type, $sentence)
-{
-    $user = auth()->user(); // Get the authenticated user
+    private function saveUserVoicemail($type, $sentence)
+    {
+            $user = auth()->user(); // Get the authenticated user
+        
+            if (!$user) {
+                return false; // If user is not authenticated, return false
+            }
 
-    if (!$user) {
-        return false; // If user is not authenticated, return false
-    }
-
-    // Set voice ID dynamically
-    $voiceId = ($user->gender === 'female') ? env('AWS_FEMALE_VOICE_ID', 'Joanna') : env('AWS_MALE_VOICE_ID', 'Matthew');
-
-    // Generate unique filename based on sentence hash & gender
-    $sentenceHash = md5($sentence);
-    $fileName = "user_voicemail_{$user->id}_{$sentenceHash}_{$user->gender}.mp3";
-    $relativePath = "voicemails/{$fileName}";
-    $fullPath = storage_path("app/public/{$relativePath}");
-
-    // Initialize Polly client
-    $pollyClient = new PollyClient([
-        'version' => 'latest',
-        'region' => env('AWS_DEFAULT_REGION'),
-        'credentials' => [
-            'key' => env('AWS_ACCESS_KEY_ID'),
-            'secret' => env('AWS_SECRET_ACCESS_KEY'),
-        ]
-    ]);
-
-    try {
-        // Generate speech using Polly
-        $result = $pollyClient->synthesizeSpeech([
-            'Text' => $sentence,
-            'OutputFormat' => 'mp3',
-            'VoiceId' => $voiceId,
-        ]);
-
-        $audioStream = $result->get('AudioStream');
-
-        // Ensure directory exists
-        if (!file_exists(dirname($fullPath))) {
-            mkdir(dirname($fullPath), 0777, true);
+            // Set voice ID dynamically
+            $voiceId = ($user->gender === 'female') ? env('AWS_FEMALE_VOICE_ID', 'Joanna') : env('AWS_MALE_VOICE_ID', 'Matthew');
+        
+            // Generate unique filename based on sentence hash & gender
+            $sentenceHash = md5($sentence);
+            $fileName = "user_voicemail_{$user->id}_{$sentenceHash}_{$user->gender}.mp3";
+            $relativePath = "voicemails/{$fileName}";
+            $fullPath = storage_path("app/public/{$relativePath}");
+        
+            // Initialize Polly client
+            $pollyClient = new PollyClient([
+                'version' => 'latest',
+                'region' => env('AWS_DEFAULT_REGION'),
+                'credentials' => [
+                    'key' => env('AWS_ACCESS_KEY_ID'),
+                    'secret' => env('AWS_SECRET_ACCESS_KEY'),
+                ]
+            ]);
+        
+            try {
+                // Generate speech using Polly
+                $result = $pollyClient->synthesizeSpeech([
+                    'Text' => $sentence,
+                    'OutputFormat' => 'mp3',
+                    'VoiceId' => $voiceId,
+                ]);
+        
+                $audioStream = $result->get('AudioStream');
+        
+                // Ensure directory exists
+                if (!file_exists(dirname($fullPath))) {
+                    mkdir(dirname($fullPath), 0777, true);
+                }
+        
+                // Save the audio content (Overwrite existing files)
+                file_put_contents($fullPath, $audioStream);
+        
+                // Save/update database record
+                UserEmergencyRecording::updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'type' => $type,
+                        'sentence' => $sentence,
+                    ],
+                    ['voice_path' => $relativePath]
+                );
+        
+                return true; // Successfully saved, return true
+            } catch (AwsException $e) {
+                return false; // If Polly fails, return false
+            }
         }
-
-        // Save the audio content (Overwrite existing files)
-        file_put_contents($fullPath, $audioStream);
-
-        // Save/update database record
-        UserEmergencyRecording::updateOrCreate(
-            [
-                'user_id' => $user->id,
-                'type' => $type,
-                'sentence' => $sentence,
-            ],
-            ['voice_path' => $relativePath]
-        );
-
-        return true; // Successfully saved, return true
-    } catch (AwsException $e) {
-        return false; // If Polly fails, return false
-    }
-}
 
 
 
@@ -458,6 +445,32 @@ class SosController extends BaseController
     }
     
     
+   public function call911()
+{
+    $twilio = new Client(env('TWILIO_SID'), env('TWILIO_AUTH_TOKEN'));
+
+    $twilioNumber = env('TWILIO_NUMBER');
+    $dispatcherNumber = env('DISPATCHER_NUMBER');
+
+    //Generate TwiML directly
+    $twiml = new VoiceResponse();
+    $twiml->play('https://app.appogramengineering.com/public/storage/global-emergency-recordings/health-emergency.wav', ['loop' => 5]);
+
+    // Make the call
+    $call = $twilio->calls->create(
+        $dispatcherNumber,   // To
+        $twilioNumber,       // From
+        [
+            'twiml' => $twiml->__toString()
+        ]
+    );
+
+    return response()->json([
+        'success' => true,
+        'call_sid' => $call->sid
+    ]);
+}
+        
 
 
     

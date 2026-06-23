@@ -25,22 +25,7 @@ class Message extends Model
         return $this->belongsTo(User::class, 'receiver_id');
     }
 
-    // public function getAttachmentAttribute($value)
-    // {
-    //     // Check if the value exists and generate the full URL using the 'asset' helper
-    //     return $value ? asset('public/storage/' . $value) : null;
-    // }
-    
-    // public function toArray()
-    // {
-    //     $array = parent::toArray(); 
-
-    //     // Ensure message and attachment are included even if null
-    //     $array['message'] = $this->message ?? null;
-    //     $array['attachment'] = $this->attachment ?? null;
-
-    //     return $array;
-    // }
+   
     
       public function getAttachmentAttribute($value)
     {

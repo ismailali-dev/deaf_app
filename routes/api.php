@@ -110,6 +110,7 @@ Route::group(['prefix'=>'common'], function () {
             
             
             Route::group(['prefix' => 'activate_listener'], function () {
+                
                 Route::post('update-location', 'UserCommonController@updateLocation');
                 Route::get('/get-activate-listener-users', 'UserCommonController@getActivatelistenerUers');
                 Route::get('/get-activate-listener-users-count', 'UserCommonController@getActivatelistenerUersCount');
@@ -179,7 +180,7 @@ Route::group(['prefix'=>'deaf','middleware' => 'auth:api','namespace' => 'Deaf']
                  });
                  
                  Route::post('update-profile-info', 'SosController@updateProfileInfo');
-                 
+                 Route::post('emergency-call', 'SosController@call911');
 
             });
            
