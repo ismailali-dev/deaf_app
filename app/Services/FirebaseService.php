@@ -66,6 +66,7 @@ namespace App\Services;
 use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification as FirebaseNotification;
+use Illuminate\Support\Facades\Log;
 
 class FirebaseService
 {
@@ -73,8 +74,25 @@ class FirebaseService
 
     public function __construct()
     {
-        $factory = (new Factory)->withServiceAccount(config('firebase.projects.app.credentials.file'));
+        $credentialsPath = config('firebase.projects.app.credentials.file');
+
+        if ($credentialsPath && !$this->isAbsolutePath($credentialsPath)) {
+            $credentialsPath = base_path($credentialsPath);
+        }
+
+        if (!$credentialsPath || !is_readable($credentialsPath)) {
+            throw new \RuntimeException('Firebase service account file is not configured or readable.');
+        }
+
+        $factory = (new Factory)->withServiceAccount($credentialsPath);
         $this->messaging = $factory->createMessaging();
+    }
+
+    private function isAbsolutePath(string $path): bool
+    {
+        return str_starts_with($path, '/')
+            || str_starts_with($path, '\\')
+            || preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1;
     }
 
     /**
@@ -124,8 +142,18 @@ class FirebaseService
                     'token' => $token,
                     'error' => $e->getMessage()
                 ];
+
+                Log::error('Firebase notification failed', [
+                    'token_suffix' => substr($token, -8),
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
+
+        Log::info('Firebase notification batch completed', [
+            'success_count' => count($responses),
+            'failure_count' => count($failures),
+        ]);
 
         return [
             'success_count' => count($responses),

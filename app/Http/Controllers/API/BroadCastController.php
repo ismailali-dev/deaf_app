@@ -254,12 +254,12 @@ class BroadCastController extends BaseController
                     } elseif ($existingRequest->status === 'cancelled' || $existingRequest->status === 'denied') {
                         // Update status from cancelled to pending
                         $existingRequest->update(['status' => 'pending']);
+                        $recipient->notify(new FirebasePushNotification(
+                            'Friend request',
+                            'Friend request sent again.'
+                        ));
+
                         return successResponse('Friend request sent again.');
-                        
-                         $recipient->notify(new FirebasePushNotification(
-                                'Friend request',
-                                'Friend request sent again.'
-                            ));
                 
                     }
                 } else {

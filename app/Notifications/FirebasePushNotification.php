@@ -30,12 +30,24 @@ class FirebasePushNotification extends Notification
     public function toFirebase($notifiable)
     {
         // Retrieve all device tokens related to the user
-        $deviceTokens = $notifiable->devices()->pluck('device_token')->toArray();
+        $deviceTokens = $notifiable->devices()
+            ->whereNotNull('device_token')
+            ->where('device_token', '!=', '')
+            ->pluck('device_token')
+            ->map(fn ($token) => trim($token))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     
         // Check if there are any device tokens
         if (!empty($deviceTokens)) {
             // Send notifications using the FirebaseService
             $this->firebaseService->sendNotificationToMultiple($deviceTokens, $this->title, $this->body);
+        } else {
+            \Log::warning('Firebase notification skipped: user has no valid device token', [
+                'user_id' => $notifiable->getKey(),
+            ]);
         }
     }
 
