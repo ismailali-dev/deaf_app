@@ -15,6 +15,7 @@ use App\Http\Resources\Deaf\LatestShowPairsResource;
 use Illuminate\Validation\ValidationException;
 use App\Models\Word;
 use Illuminate\Support\Facades\Storage;
+use App\Jobs\ExtractAudioFeatures;
 
 
 class SentenceController extends BaseController
@@ -94,6 +95,14 @@ class SentenceController extends BaseController
             
            
            foreach ($uploadedPaths as $path) {
+                $audioFile = AudioFile::create([
+                    'audioable_id' => $sentence->id,
+                    'audioable_type' => get_class($sentence),
+                    'file_path' => $path,
+                ]);
+
+                ExtractAudioFeatures::dispatch($audioFile->id);
+                continue;
                 
                 $fullPath = public_path('storage/'.$path); // Full path to pass to Python
     
@@ -101,24 +110,6 @@ class SentenceController extends BaseController
                 $command = "source /home/appokfqz/virtualenv/app.appogramengineering.com/python/3.6/bin/activate && " .
                     "python /home/appokfqz/app.appogramengineering.com/python/test_audio_features.py " . escapeshellarg($fullPath);
     
-                $output = shell_exec($command);
-                 
-                $features = json_decode($output, true);
-
-                if (!$features || $features['status'] !== 'success') {
-                    throw new \Exception($features['message'] ?? 'Unknown error occurred during feature extraction.');
-                }
-              
-    
-                $features = $features['features'];
-                
-                // Save audio file and extracted features in database
-                AudioFile::create([
-                    'audioable_id' => $sentence->id,
-                    'audioable_type' => get_class($sentence),
-                    'file_path' => $path,
-                    'features' => $features,
-                ]);
             }
             
     
@@ -131,7 +122,7 @@ class SentenceController extends BaseController
             //     ]);
             // }
             
-            return successResponse('Sentence and audio files saved successfully.', 200);
+            return successResponse('Sentence and audio files saved successfully. Audio processing has started.', 200);
         }
         catch (ValidationException $exception) {
             // Specifically catch validation exceptions

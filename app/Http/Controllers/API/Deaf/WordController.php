@@ -13,6 +13,7 @@ use Illuminate\Validation\Rule;
 use App\Http\Resources\Deaf\WordResourceList;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
+use App\Jobs\ExtractAudioFeatures;
 
 class WordController extends BaseController
 {
@@ -100,35 +101,18 @@ class WordController extends BaseController
             // }
             
             foreach ($uploadedPaths as $path) {
-                
-                $fullPath = base_path('public/storage/'.$path); // Full path to pass to Python
-                
-                $baseCommand = config('python.feature_script');
-                $command = $baseCommand . ' ' . escapeshellarg($fullPath);
-                
-    
-                $output = shell_exec($command);
-                 
-                $features = json_decode($output, true);
-
-                if (!$features || $features['status'] !== 'success') {
-                    throw new \Exception($features['message'] ?? 'Unknown error occurred during feature extraction.');
-                }
-              
-    
-                $features = $features['features'];
-                
-                // Save audio file and extracted features in database
-                AudioFile::create([
+                // Store the record now and extract features outside the HTTP request.
+                $audioFile = AudioFile::create([
                     'audioable_id' => $word->id,
                     'audioable_type' => get_class($word),
                     'file_path' => $path,
-                    'features' => $features,
                 ]);
+
+                ExtractAudioFeatures::dispatch($audioFile->id);
             }
         
             
-            return successResponse('Word and audio files saved successfully.', 200);
+            return successResponse('Word and audio files saved successfully. Audio processing has started.', 200);
         }
        catch (ValidationException $exception) {
             // Specifically catch validation exceptions
