@@ -86,6 +86,7 @@ class User extends \TCG\Voyager\Models\User implements JWTSubject
     protected $hidden = [
         'password',
         'remember_token',
+        'test_access_token',
     ];
 
     /**

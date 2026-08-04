@@ -335,43 +335,66 @@ class SosController extends BaseController
 
     public function getUserVoicemails(Request $request)
     {
-        
-        
-        // Fetch all available global types
-        $globalRecordings = GlobalEmergencyRecording::all();
-        $types = $globalRecordings->pluck('type')->toArray();
-    
-        $recordings = [];
-        $user = auth()->user();
-        
-        if (
-            !$user->race || 
-            count(@$user->medical_conditions) < 1
-        ) {
-            return errorResponse("Please complete your emergency profile information", 400);
-        }
-        
         try {
-            // Get the authenticated user's ID
-           
-            // Retrieve recordings for the current user
-            $recordings = UserEmergencyRecording::where('user_id', $this->userID)->get();
-    
-            // Check if recordings exist
-            if ($recordings->isEmpty()) {
-                return successResponse('No emergency recordings found for the current user.', [], 200);
+            $user = auth('api')->user();
+
+            if (!$user) {
+                return errorResponse('Unauthenticated.', 401);
             }
-    
-            return successResponse('Emergency recordings retrieved successfully', $recordings, 200);
+
+            // Prefer a user's personalized voicemail and fall back to the global
+            // recording for any emergency type that has not been generated yet.
+            $userRecordings = UserEmergencyRecording::where('user_id', $user->id)
+                ->latest('created_at')
+                ->get()
+                ->unique('type')
+                ->keyBy('type');
+
+            $isFemale = strtolower((string) $user->gender) === 'female';
+            $recordings = GlobalEmergencyRecording::query()
+                ->orderBy('id')
+                ->get()
+                ->map(function ($globalRecording) use ($userRecordings, $isFemale) {
+                    $userRecording = $userRecordings->get($globalRecording->type);
+
+                    if ($userRecording) {
+                        return [
+                            'id' => $userRecording->id,
+                            'type' => $userRecording->type,
+                            'sentence' => $userRecording->sentence,
+                            'voice_path' => $userRecording->voice_path,
+                        ];
+                    }
+
+                    $voicePath = $isFemale
+                        ? $globalRecording->voice_path_female
+                        : $globalRecording->voice_path_male;
+
+                    return [
+                        'id' => 0,
+                        'type' => $globalRecording->type,
+                        'sentence' => $globalRecording->sentence,
+                        'voice_path' => $voicePath
+                            ? asset('public/storage/' . $voicePath)
+                            : null,
+                    ];
+                })
+                ->values();
+
+            if ($recordings->isEmpty()) {
+                return successResponse('No emergency recordings found.', [], 200);
+            }
+
+            return successResponse(
+                'Emergency recordings retrieved successfully.',
+                $recordings,
+                200
+            );
         } catch (\Throwable $th) {
             return errorResponse($th->getMessage(), 500);
         }
-        
-        
-        
     }
-    
-    
+
    public function updateProfileInfo(UpdateUserProfileInfoRequest $request)
     {
         try {
