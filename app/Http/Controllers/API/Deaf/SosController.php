@@ -217,56 +217,69 @@ class SosController extends BaseController
                 return false; // If user is not authenticated, return false
             }
 
-            // Set voice ID dynamically
-            $voiceId = ($user->gender === 'female') ? env('AWS_FEMALE_VOICE_ID', 'Joanna') : env('AWS_MALE_VOICE_ID', 'Matthew');
-        
             // Generate unique filename based on sentence hash & gender
             $sentenceHash = md5($sentence);
             $fileName = "user_voicemail_{$user->id}_{$sentenceHash}_{$user->gender}.mp3";
             $relativePath = "voicemails/{$fileName}";
             $fullPath = storage_path("app/public/{$relativePath}");
         
-            // Initialize Polly client
-            $pollyClient = new PollyClient([
-                'version' => 'latest',
-                'region' => env('AWS_DEFAULT_REGION'),
-                'credentials' => [
-                    'key' => env('AWS_ACCESS_KEY_ID'),
-                    'secret' => env('AWS_SECRET_ACCESS_KEY'),
-                ]
-            ]);
-        
             try {
-                // Generate speech using Polly
-                $result = $pollyClient->synthesizeSpeech([
-                    'Text' => $sentence,
-                    'OutputFormat' => 'mp3',
-                    'VoiceId' => $voiceId,
-                ]);
-        
-                $audioStream = $result->get('AudioStream');
-        
                 // Ensure directory exists
                 if (!file_exists(dirname($fullPath))) {
                     mkdir(dirname($fullPath), 0777, true);
                 }
-        
-                // Save the audio content (Overwrite existing files)
-                file_put_contents($fullPath, $audioStream);
+
+                $baseCommand = config('python.tts_script');
+                if (!$baseCommand) {
+                    throw new \RuntimeException('PYTHON_TTS_SCRIPT is not configured.');
+                }
+
+                $command = $baseCommand
+                    . ' ' . escapeshellarg($sentence)
+                    . ' ' . escapeshellarg($fullPath);
+                $output = shell_exec($command);
+                $response = json_decode($output ?? '', true);
+
+                if (($response['status'] ?? null) !== 'success' || !is_file($fullPath)) {
+                    throw new \RuntimeException($response['message'] ?? 'Python TTS generation failed.');
+                }
         
                 // Save/update database record
-                UserEmergencyRecording::updateOrCreate(
+                $recording = UserEmergencyRecording::updateOrCreate(
                     [
                         'user_id' => $user->id,
                         'type' => $type,
-                        'sentence' => $sentence,
                     ],
-                    ['voice_path' => $relativePath]
+                    [
+                        'sentence' => $sentence,
+                        'voice_path' => $relativePath,
+                    ]
                 );
+
+                // Remove legacy duplicates created when sentence was part of the key.
+                $duplicates = UserEmergencyRecording::where('user_id', $user->id)
+                    ->where('type', $type)
+                    ->whereKeyNot($recording->id)
+                    ->get();
+
+                foreach ($duplicates as $duplicate) {
+                    $oldPath = $duplicate->getRawOriginal('voice_path');
+                    if ($oldPath && $oldPath !== $relativePath) {
+                        Storage::disk('public')->delete($oldPath);
+                    }
+                    $duplicate->delete();
+                }
         
                 return true; // Successfully saved, return true
-            } catch (AwsException $e) {
-                return false; // If Polly fails, return false
+            } catch (\Throwable $e) {
+                \Log::error('Unable to generate personalized emergency voice with Python TTS.', [
+                    'user_id' => $user->id,
+                    'type' => $type,
+                    'exception' => get_class($e),
+                    'error' => $e->getMessage(),
+                ]);
+
+                return false;
             }
         }
 
@@ -333,6 +346,25 @@ class SosController extends BaseController
     
   
 
+    private function personalizeEmergencyTemplate(string $template, User $user): string
+    {
+        $dateOfBirth = $user->date_of_birth
+            ? \Carbon\Carbon::parse($user->date_of_birth)->format('F j, Y')
+            : 'not provided';
+
+        $search = [
+            '{{name}}', '{{username}}', '{{age}}', '{{adress}}', '{{address}}', '{{date_of_birth}}',
+            '{name}', '{username}', '{age}', '{adress}', '{address}', '{date_of_birth}',
+        ];
+        $replace = [
+            $user->name ?: $user->username, $user->username, $user->age ?? 'not provided', $user->address, $user->address, $dateOfBirth,
+            $user->name ?: $user->username, $user->username, $user->age ?? 'not provided', $user->address, $user->address, $dateOfBirth,
+        ];
+
+        $sentence = str_ireplace($search, $replace, $template);
+        return trim(preg_replace('/\\s+/', ' ', $sentence));
+    }
+
     public function getUserVoicemails(Request $request)
     {
         try {
@@ -345,24 +377,56 @@ class SosController extends BaseController
             // Prefer a user's personalized voicemail and fall back to the global
             // recording for any emergency type that has not been generated yet.
             $userRecordings = UserEmergencyRecording::where('user_id', $user->id)
-                ->latest('created_at')
+                ->latest('updated_at')
                 ->get()
-                ->unique('type')
-                ->keyBy('type');
+                ->unique(fn ($recording) => Str::lower(trim($recording->type)))
+                ->keyBy(fn ($recording) => Str::lower(trim($recording->type)));
+
+            $globalRecordings = GlobalEmergencyRecording::query()
+                ->orderBy('id')
+                ->get();
+
+            // Existing users may not have recordings for types added later.
+            // Generate each missing personalized recording once, then reuse it.
+            $generatedMissingRecording = false;
+            foreach ($globalRecordings as $globalRecording) {
+                $typeKey = Str::lower(trim($globalRecording->type));
+                if ($userRecordings->has($typeKey)) {
+                    continue;
+                }
+
+                $sentence = $this->personalizeEmergencyTemplate($globalRecording->sentence, $user);
+                if ($this->saveUserVoicemail($globalRecording->type, $sentence)) {
+                    $generatedMissingRecording = true;
+                }
+            }
+
+            if ($generatedMissingRecording) {
+                $userRecordings = UserEmergencyRecording::where('user_id', $user->id)
+                    ->latest('updated_at')
+                    ->get()
+                    ->unique(fn ($recording) => Str::lower(trim($recording->type)))
+                    ->keyBy(fn ($recording) => Str::lower(trim($recording->type)));
+            }
 
             $isFemale = strtolower((string) $user->gender) === 'female';
-            $recordings = GlobalEmergencyRecording::query()
-                ->orderBy('id')
-                ->get()
+            $recordings = $globalRecordings
                 ->map(function ($globalRecording) use ($userRecordings, $isFemale) {
-                    $userRecording = $userRecordings->get($globalRecording->type);
+                    $typeKey = Str::lower(trim($globalRecording->type));
+                    $userRecording = $userRecordings->get($typeKey);
 
                     if ($userRecording) {
+                        $rawVoicePath = $userRecording->getRawOriginal('voice_path');
+                        $voiceVersion = optional($userRecording->updated_at)->timestamp ?? time();
+
                         return [
                             'id' => $userRecording->id,
                             'type' => $userRecording->type,
                             'sentence' => $userRecording->sentence,
-                            'voice_path' => $userRecording->voice_path,
+                            'voice_path' => $rawVoicePath
+                                ? asset('public/storage/' . $rawVoicePath) . '?v=' . $voiceVersion
+                                : null,
+                            'updated_at' => $userRecording->updated_at,
                         ];
                     }
 
@@ -400,18 +464,42 @@ class SosController extends BaseController
         try {
             $user = auth()->user();
             
-            // Update user profile details
-            $user->update([
-                'medical_conditions' => $request->medical_conditions,
-                'race' => $request->race,
-                'armed' => $request->armed,
-            ]);
+            $validated = $request->validated();
+            $requestedAge = $validated['age'] ?? null;
+            unset($validated['age']);
+            if ($requestedAge !== null && !isset($validated['date_of_birth'])) {
+                $validated['date_of_birth'] = now()->subYears($requestedAge)->toDateString();
+            }
+
+            // Save supported profile fields before building the voicemail.
+            $user->update($validated);
+            $user->refresh();
+
+            // Age normally comes from date_of_birth; explicit age supports older clients.
+            $spokenAge = $requestedAge ?? $user->age;
+            $spokenName = $user->name ?: $user->username;
+            $spokenDateOfBirth = $user->date_of_birth
+                ? \Carbon\Carbon::parse($user->date_of_birth)->format('F j, Y')
+                : 'not provided';
+
+            // The existing sentence template reads these model properties.
+            $user->name = $spokenName;
+            $user->race = $user->race ?: 'race not specified';
     
             // Check if required fields are present
             if (!is_null($user->medical_conditions) && !is_null($user->race) && !is_null($user->armed)) {
     
-                // Emergency types
-                $emergencyTypes = ['Fire', 'Crime', 'Health', 'Report/Witness'];
+                // Personalize every configured emergency type, not only four hard-coded ones.
+                $emergencyTypes = GlobalEmergencyRecording::query()
+                    ->pluck('type')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                if (empty($emergencyTypes)) {
+                    $emergencyTypes = ['Fire', 'Crime', 'Health', 'Report/Witness'];
+                }
     
                 // Convert medical conditions array to a comma-separated string
                 $medicalConditions = is_array($user->medical_conditions) 
@@ -427,10 +515,16 @@ class SosController extends BaseController
                                 I am {$user->age} years old with {$medicalConditionsText}. I am a {$user->race}. I am " . ($user->armed ? "armed" : "unarmed") . ".";
     
                     
-                    $this->saveUserVoicemail($type,$sentence);
+                    $sentence .= ' My date of birth is ' . $spokenDateOfBirth . '.';
+
+                    if (!$this->saveUserVoicemail($type, $sentence)) {
+                        throw new \RuntimeException('Unable to regenerate emergency voice.');
+                    }
                 }
             }
     
+            // Discard temporary spoken-name/age fallbacks before returning profile data.
+            $user->refresh();
             $response = ProfileResource::make($user);
             return successResponse('Profile Updated Successfully', $response, 200);
     
